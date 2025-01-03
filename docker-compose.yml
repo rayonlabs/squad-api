@@ -47,6 +47,7 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - plugins.security.disabled=true
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Sup3rSecureP@ssword!
+      - OPENSEARCH_SETTING_ACTION_AUTO_CREATE_INDEX=*
     image: opensearchproject/opensearch:2.18.0
     ulimits:
       nofile:

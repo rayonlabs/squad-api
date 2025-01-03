@@ -1,5 +1,5 @@
 """
-Settings used in creating OpenSearch indices for X (tweets? WTF are they called now?)
+Storage/retrieval/settings/etc. for X (tweets? WTF are they called now?)
 """
 
 import time
@@ -7,10 +7,12 @@ import uuid
 import opensearchpy
 from loguru import logger
 from datetime import datetime
+from async_lru import alru_cache
 from api.config import settings
 from api.storage.base import (
     detect_language,
     generate_embeddings,
+    generate_template,
 )
 
 
@@ -88,7 +90,11 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
     if isinstance(created_at, str):
         created_at = datetime.fromisoformat(created_at.rstrip("Z"))
     created_at = created_at.replace(tzinfo=None)
-    language = "english" if not tweet["text"] or not tweet["text"].strip() else detect_language(tweet["text"])
+    language = (
+        "english"
+        if not tweet["text"] or not tweet["text"].strip()
+        else detect_language(tweet["text"])
+    )
     doc = {
         "id_num": tweet["id"],
         "user_id_term": tweet["author_id"],
@@ -124,7 +130,7 @@ async def index_tweets(tweets: list[dict]) -> None:
         bulk_body.append(
             {
                 "update": {
-                    "_index": f"tweets-{settings.tweets_index_version}",
+                    "_index": f"tweets-{settings.tweet_index_version}",
                     "_id": str(doc["id_num"]),
                 }
             }
@@ -160,7 +166,7 @@ async def most_recent_user_tweet(user_id: int) -> list[dict]:
         ],
     }
     response = await settings.opensearch_client.search(
-        index=f"tweets-{settings.tweets_index_version}",
+        index=f"tweets-{settings.tweet_index_version}",
         body=query,
     )
     documents = response["hits"]["hits"]
@@ -191,37 +197,19 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
     except opensearchpy.exceptions.NotFoundError:
         most_recent_id = 0
 
-    # Base X api args.
-    call_args = dict(
-        since_id=most_recent_id,
-        tweet_fields=["id", "text", "created_at", "public_metrics", "author_id"],
-        expansions=["author_id"],
-        max_results=5,
-        exclude=["retweets", "replies"],
+    # Perform the search.
+    results = inject_usernames(
+        await settings.tweepy_client.get_users_tweets(
+            user_id,
+            since_id=most_recent_id,
+            tweet_fields=["id", "text", "created_at", "public_metrics", "author_id"],
+            expansions=["author_id"],
+            max_results=100,
+        )
     )
 
-    # First we call excluding retweets and replies.
-    primary_results = await settings.tweepy_client.get_users_tweets(user_id, **call_args)
-
-    # Then we call excluding nothing, which will hopefully scoop up all replies and retweets.
-    call_args["exclude"] = None
-    secondary_results = await settings.tweepy_client.get_users_tweets(user_id, **call_args)
-
-    # Get the unique subset.
-    primary = inject_usernames(primary_results)
-    secondary = inject_usernames(secondary_results)
-    unique = {}
-    for batch in [primary, secondary]:
-        if not batch:
-            continue
-        for item in batch:
-            unique[item["id"]] = item
-
     # Convert to indexable format.
-    tweets = [await tweet_to_index_format(item, api_key) for item in unique.values()]
-
-    import json
-    print(json.dumps(tweets, indent=2))
+    tweets = [await tweet_to_index_format(item, api_key) for item in results]
 
     # Index.
     if tweets:
@@ -252,3 +240,31 @@ async def find_and_index_tweets(search: str, api_key: str) -> bool:
     )
     results = [await tweet_to_index_format(t, api_key) for t in inject_usernames(results)]
     await index_tweets(results)
+
+
+@alru_cache(maxsize=1)
+async def initialize():
+    """
+    Ensure the index is initialized in OpenSearch.
+    """
+    template_name = "tweets-template"
+    pipeline_name = "tweets-pipeline"
+    index_name = f"tweets-{settings.tweet_index_version}"
+    template, pipeline = generate_template(
+        "tweets",
+        shard_count=settings.tweet_index_shards,
+        replica_count=settings.tweet_index_replicas,
+        embedding_weight=settings.tweet_embed_weight,
+        **STATIC_FIELDS,
+    )
+    if await settings.opensearch_client.indices.exists(index=index_name):
+        return True
+    if not await settings.opensearch_client.indices.exists_index_template(template_name):
+        await settings.opensearch_client.indices.put_index_template(
+            name=template_name,
+            body=template,
+        )
+        await settings.opensearch_client.http.put(
+            f"/_search/pipeline/{pipeline_name}", body=pipeline
+        )
+    return True

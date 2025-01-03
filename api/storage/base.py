@@ -231,7 +231,7 @@ def generate_template(
         "index_patterns": [f"{index_prefix}-*"],
         "template": {
             "settings": {
-                "index.search.default_pipeline": f"hybrid-search-{index_prefix}",
+                "index.search.default_pipeline": f"{index_prefix}-pipeline",
                 "index.refresh_interval": "1s",
                 "knn": True,
                 "knn.algo_param.ef_search": 100,
@@ -245,7 +245,7 @@ def generate_template(
             "mappings": mappings,
         },
         "_meta": {
-            "description": "Index template for {index_prefix}",
+            "description": f"Index template for {index_prefix}",
         },
     }
 
