@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: agents
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: always
+
+  redis:
+    image: redis:7
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--requirepass", "redispassword"]
+    environment:
+      - REDIS_PASSWORD=redispassword
+    restart: always
+
+#  api:
+#    build:
+#      context: .
+#      target: api
+#    volumes:
+#      - ./api:/app/api
+#    environment:
+#      - POSTGRESQL=postgresql+asyncpg://user:password@postgres:5432/chutes
+#      - REDIS_URL=redis://:redispassword@redis:6379/0
+#      - OPENSEARCH_URL=http://opensearch:9200
+#    restart: always
+#    ports:
+#      - "8000:8000"
+#    depends_on:
+#      - postgres
+#      - redis
+
+  opensearch:
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms256m -Xmx256m
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+      - plugins.security.disabled=true
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Sup3rSecureP@ssword!
+    image: opensearchproject/opensearch:2.18.0
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    restart: always
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+
+  temporal:
+    depends_on:
+      - postgres
+      - opensearch
+    environment:
+      - DB=postgres12
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - POSTGRES_USER=user
+      - POSTGRES_PWD=password
+      - POSTGRES_SEEDS=postgres
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/dev-sql.yml
+      - ENABLE_ES=true
+      - ES_SEEDS=opensearch
+      - ES_VERSION=v7
+    image: temporalio/auto-setup:1.26.2
+    ports:
+      - "127.0.0.1:7233:7233"
+    volumes:
+      - ./dev/dev-sql.yml:/etc/temporal/config/dynamicconfig/dev-sql.yml
+    restart: always
+
+  temporal-admin-tools:
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    image: temporalio/admin-tools:1.26.2
+    stdin_open: true
+    tty: true
+    restart: always
+
+  temporal-ui:
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    image: temporalio/ui:2.33.0
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: always
+
+volumes:
+  postgres_data:
+  opensearch_data:

@@ -26,6 +26,9 @@ pyjwt = "^2.10.1"
 tweepy = "^4.14.0"
 langdetect = "^1.0.9"
 opensearch-py = {extras = ["async"], version = "^2.8.0"}
+redis = "^5.2.1"
+async-lru = "^2.0.4"
+oauthlib = "^3.2.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.5"

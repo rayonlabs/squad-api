@@ -4,6 +4,7 @@ Settings used in creating OpenSearch indices for X (tweets? WTF are they called 
 
 import time
 import uuid
+import opensearchpy
 from loguru import logger
 from datetime import datetime
 from api.config import settings
@@ -81,17 +82,18 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
     """
     Convert a tweepy tweet dict into the schema used by opensearch with dynamic field names.
     """
+    logger.debug(f"Converting tweet {tweet['id']} to indexable format...")
     metrics = tweet.get("public_metrics", {})
     created_at = tweet.get("created_at", datetime.utcnow())
     if isinstance(created_at, str):
         created_at = datetime.fromisoformat(created_at.rstrip("Z"))
     created_at = created_at.replace(tzinfo=None)
-    language = detect_language(tweet["text"])
+    language = "english" if not tweet["text"] or not tweet["text"].strip() else detect_language(tweet["text"])
     doc = {
         "id_num": tweet["id"],
-        "user_id_term": tweet["user_id"],
+        "user_id_term": tweet["author_id"],
         "username_term": tweet["username"],
-        "created_date": created_at,
+        "created_date": created_at.isoformat().rstrip("Z"),
         "quote_count_num": metrics.get("quote_count", 0),
         "reply_count_num": metrics.get("reply_count", 0),
         "retweet_count_num": metrics.get("retweet_count", 0),
@@ -103,7 +105,9 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
         doc[f"tweet_text_{language}"] = tweet["text"]
 
     # Calculate embeddings.
-    doc["embeddings"] = await generate_embeddings(tweet["text"], api_key)
+    if (tweet["text"] or "").strip():
+        logger.debug(f"Calculated embeddings for {tweet['text']}")
+        doc["embeddings"] = await generate_embeddings(tweet["text"], api_key)
 
     return doc
 
@@ -120,7 +124,7 @@ async def index_tweets(tweets: list[dict]) -> None:
         bulk_body.append(
             {
                 "update": {
-                    "_index": f"tweets-{settings.tweet_index_version}",
+                    "_index": f"tweets-{settings.tweets_index_version}",
                     "_id": str(doc["id_num"]),
                 }
             }
@@ -131,7 +135,7 @@ async def index_tweets(tweets: list[dict]) -> None:
                 "doc_as_upsert": True,
             }
         )
-    result = await self.search_client.bulk(  # noqa
+    result = await settings.opensearch_client.bulk(  # noqa
         body=bulk_body,
         refresh=True,
     )
@@ -156,7 +160,7 @@ async def most_recent_user_tweet(user_id: int) -> list[dict]:
         ],
     }
     response = await settings.opensearch_client.search(
-        index=f"tweets-{settings.tweet_index_version}",
+        index=f"tweets-{settings.tweets_index_version}",
         body=query,
     )
     documents = response["hits"]["hits"]
@@ -182,14 +186,17 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
         return False
 
     # Get the most recent tweet date, to avoid duplicate search work.
-    most_recent_id = await most_recent_user_tweet(user_id)
+    try:
+        most_recent_id = await most_recent_user_tweet(user_id)
+    except opensearchpy.exceptions.NotFoundError:
+        most_recent_id = 0
 
     # Base X api args.
     call_args = dict(
         since_id=most_recent_id,
         tweet_fields=["id", "text", "created_at", "public_metrics", "author_id"],
         expansions=["author_id"],
-        max_results=500,
+        max_results=5,
         exclude=["retweets", "replies"],
     )
 
@@ -211,7 +218,10 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
             unique[item["id"]] = item
 
     # Convert to indexable format.
-    tweets = [await tweet_to_index_format(item) for item in unique.values()]
+    tweets = [await tweet_to_index_format(item, api_key) for item in unique.values()]
+
+    import json
+    print(json.dumps(tweets, indent=2))
 
     # Index.
     if tweets:
@@ -223,7 +233,7 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
     return False
 
 
-async def find_and_index_tweets(search: str) -> bool:
+async def find_and_index_tweets(search: str, api_key: str) -> bool:
     """
     Load recent tweets by search string instead of username.
     """
@@ -234,11 +244,11 @@ async def find_and_index_tweets(search: str) -> bool:
             f"Most recent search for '{search}' was {int(delta)} seconds ago, skipping..."
         )
         return False
-    results = await settings.opensearch_client.search_recent_tweets(
+    results = await settings.tweepy_client.search_recent_tweets(
         search,
         tweet_fields=["id", "text", "created_at", "public_metrics", "author_id"],
         expansions=["author_id"],
-        max_results=500,
+        max_results=100,
     )
-    results = inject_usernames(results)
+    results = [await tweet_to_index_format(t, api_key) for t in inject_usernames(results)]
     await index_tweets(results)
