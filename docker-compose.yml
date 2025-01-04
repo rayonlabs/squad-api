@@ -46,8 +46,8 @@ services:
       - cluster.routing.allocation.disk.watermark.high=256mb
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - plugins.security.disabled=true
+      - action.auto_create_index=*
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Sup3rSecureP@ssword!
-      - OPENSEARCH_SETTING_ACTION_AUTO_CREATE_INDEX=*
     image: opensearchproject/opensearch:2.18.0
     ulimits:
       nofile:
@@ -78,7 +78,7 @@ services:
     ports:
       - "127.0.0.1:7233:7233"
     volumes:
-      - ./dev/dev-sql.yml:/etc/temporal/config/dynamicconfig/dev-sql.yml
+      - ./conf/dev-sql.yml:/etc/temporal/config/dynamicconfig/dev-sql.yml
     restart: always
 
   temporal-admin-tools:

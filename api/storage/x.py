@@ -31,6 +31,11 @@ STATIC_FIELDS = {
             },
         },
     },
+    # Attachments (e.g. images, links, videos).
+    "attachments": {
+        "type": "object",
+        "enabled": False,
+    },
     # Lanuage, if non-english.
     "language": {
         "type": "keyword",
@@ -70,8 +75,16 @@ def inject_usernames(results: list[dict]) -> list[dict]:
     """
     if not results or not results.data:
         return []
+    media_map = {}
+    for media in results.includes.get("media", []):
+        media_map[media.media_key] = media.data
     tweets = results.data
     tweet_dicts = [tweet.data for tweet in tweets]
+    for tweet in tweet_dicts:
+        if "attachments" in tweet and "media_keys" in tweet["attachments"]:
+            tweet["attachments"] = [
+                media_map.get(key) for key in tweet["attachments"]["media_keys"]
+            ]
     user_map = {}
     for user in results.includes.get("users", []):
         user_map[str(user.id)] = user.username
@@ -106,6 +119,7 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
         "favorite_count_num": metrics.get("like_count", 0),
         "default_text": tweet["text"],
         "language": language,
+        "attachments": tweet.get("attachments"),
     }
     if language != "english":
         doc[f"tweet_text_{language}"] = tweet["text"]
@@ -165,14 +179,19 @@ async def most_recent_user_tweet(user_id: int) -> list[dict]:
             {"id_num": {"order": "desc"}},
         ],
     }
-    response = await settings.opensearch_client.search(
-        index=f"tweets-{settings.tweet_index_version}",
-        body=query,
-    )
+    try:
+        response = await settings.opensearch_client.search(
+            index=f"tweets-{settings.tweet_index_version}",
+            body=query,
+        )
+    except opensearchpy.exceptions.RequestError as exc:
+        if "No mapping found for [id_num] in order to sort on" in str(exc):
+            return None
+        raise
     documents = response["hits"]["hits"]
     if not documents:
         return None
-    return documents[0]["id_num"]
+    return documents[0]["_id"]
 
 
 async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
@@ -202,8 +221,20 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
         await settings.tweepy_client.get_users_tweets(
             user_id,
             since_id=most_recent_id,
-            tweet_fields=["id", "text", "created_at", "public_metrics", "author_id"],
-            expansions=["author_id"],
+            tweet_fields=["id", "text", "created_at", "public_metrics", "author_id", "attachments"],
+            expansions=["author_id", "attachments.media_keys"],
+            media_fields=[
+                "alt_text",
+                "duration_ms",
+                "height",
+                "media_key",
+                "preview_image_url",
+                "public_metrics",
+                "type",
+                "url",
+                "variants",
+                "width",
+            ],
             max_results=100,
         )
     )
@@ -217,7 +248,57 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
         await settings.redis_client.set(f"x:last_user_update:{user_id}", str(time.time()))
         return True
 
-    logger.warning(f"No new tweets/replies/reposts found: {username=}")
+    logger.warning(f"No new tweets/replies/reposts found: {username=} since {most_recent_id=}")
+    return False
+
+
+async def get_and_index_tweets(ids: list[int], api_key: str) -> bool:
+    """
+    Get tweets by their IDs.
+    """
+    query = {
+        "query": {
+            "terms": {
+                "id_num": ids,
+            }
+        },
+        "size": 1,
+        "_source": False,
+    }
+    response = await settings.opensearch_client.search(
+        index=f"tweets-{settings.tweet_index_version}",
+        body=query,
+    )
+    existing_ids = [int(doc["_id"]) for doc in response["hits"]["hits"]]
+    to_fetch = list(set([_id for _id in ids if int(_id) not in existing_ids]))
+    if not to_fetch:
+        logger.warning(f"No new tweets to fetch: {ids}")
+        return False
+
+    results = inject_usernames(
+        await settings.tweepy_client.get_tweets(
+            to_fetch,
+            tweet_fields=["id", "text", "created_at", "public_metrics", "author_id", "attachments"],
+            expansions=["author_id", "attachments.media_keys"],
+            media_fields=[
+                "alt_text",
+                "duration_ms",
+                "height",
+                "media_key",
+                "preview_image_url",
+                "public_metrics",
+                "type",
+                "url",
+                "variants",
+                "width",
+            ],
+        )
+    )
+    tweets = [await tweet_to_index_format(item, api_key) for item in results]
+    if tweets:
+        await index_tweets(tweets)
+        return True
+    logger.warning(f"No new tweets/replies/reposts found: {ids=}")
     return False
 
 
@@ -234,8 +315,20 @@ async def find_and_index_tweets(search: str, api_key: str) -> bool:
         return False
     results = await settings.tweepy_client.search_recent_tweets(
         search,
-        tweet_fields=["id", "text", "created_at", "public_metrics", "author_id"],
-        expansions=["author_id"],
+        tweet_fields=["id", "text", "created_at", "public_metrics", "author_id", "attachments"],
+        expansions=["author_id", "attachments.media_keys"],
+        media_fields=[
+            "alt_text",
+            "duration_ms",
+            "height",
+            "media_key",
+            "preview_image_url",
+            "public_metrics",
+            "type",
+            "url",
+            "variants",
+            "width",
+        ],
         max_results=100,
     )
     results = [await tweet_to_index_format(t, api_key) for t in inject_usernames(results)]
@@ -267,4 +360,7 @@ async def initialize():
         await settings.opensearch_client.http.put(
             f"/_search/pipeline/{pipeline_name}", body=pipeline
         )
+    else:
+        logger.info(f"Index template already exists: {template_name}")
+    await settings.opensearch_client.http.put(f"/{index_name}")
     return True

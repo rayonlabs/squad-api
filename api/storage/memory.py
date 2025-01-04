@@ -173,4 +173,5 @@ async def initialize():
         )
     else:
         logger.info(f"Index template already exists: {template_name}")
+    await settings.opensearch_client.http.put(f"/{index_name}")
     return True
