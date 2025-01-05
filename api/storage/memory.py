@@ -3,10 +3,10 @@ Arbitrary (user-defined) memories, which can be conversation data, knowledge ban
 """
 
 import uuid
-from typing import List
 from loguru import logger
+from typing import Optional
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, UTC
 from async_lru import alru_cache
 from api.config import settings
 from api.storage.base import (
@@ -45,10 +45,13 @@ STATIC_FIELDS = {
         "type": "knn_vector",
         "dimension": 1024,
         "method": {
-            "engine": "nmslib",
-            "space_type": "cosinesimil",
             "name": "hnsw",
-            "parameters": {"ef_construction": 256, "m": 32},
+            "engine": "faiss",
+            "space_type": "l2",
+            "parameters": {
+                "m": 64,
+                "ef_construction": 512,
+            },
         },
     },
 }
@@ -59,6 +62,15 @@ class Memory(BaseModel):
         default_factory=lambda: str(uuid.uuid4()),
         title="UID",
         description="UID of the memory.",
+    )
+    agent_id: str = Field(
+        title="Agent UID",
+        description="UID of the agent this memory belongs to.",
+    )
+    session_id: Optional[str] = Field(
+        None,
+        title="Session UID",
+        description="UID of the session, leave None for global memories.",
     )
     meta: dict[str, str] = Field(
         {},
@@ -73,26 +85,6 @@ class Memory(BaseModel):
     text: str = Field(
         title="Text",
         description="The full text of the memory.",
-    )
-    topics: List[str] = Field(
-        [],
-        title="Topics",
-        description="List of topics discussed.",
-    )
-    emotions: List[str] = Field(
-        [],
-        title="Emotions",
-        description="Emotions expressed during the discussion.",
-    )
-    personal_info: List[str] = Field(
-        [],
-        title="Key concepts",
-        description="List of key personality traits, interests, job, education, life goals, hobbies, pet names, or any other type of personal information that is shared.",
-    )
-    sentiment: str = Field(
-        "neutral",
-        title="Sentiment",
-        description="Sentiment analysis of the memory.",
     )
     timestamp: datetime = Field(
         default_factory=datetime.utcnow,
@@ -113,14 +105,12 @@ class Memory(BaseModel):
             self.language = detect_language(self.text)
         return {
             "uid_term": self.uid,
+            "agent_id_term": self.agent_id,
+            "session_id_term": self.session_id,
             "meta": self.meta,
             "default_text": self.text,
             "language_term": self.language,
             f"memory_text_{self.language}": self.text,
-            "sentiment_term": self.sentiment,
-            f"topics_text_{self.language}": self.topics,
-            f"emotions_text_{self.language}": self.emotions,
-            f"personal_info_text_{self.language}": self.personal_info,
             "memory_date": self.timestamp.replace(tzinfo=None).isoformat().rstrip("Z"),
             "created_from_text_{self.language}": self.created_from,
             "embeddings": await generate_embeddings(self.text, api_key),
@@ -134,15 +124,164 @@ class Memory(BaseModel):
         language = doc.get("language_term", "english")
         return Memory(
             uid=doc["uid_term"],
+            agent_id=doc["agent_id_term"],
+            session_id=doc.get("session_id_term"),
             meta=doc["meta"],
             language=language,
             text=doc["default_text"],
-            sentiment=doc.get("sentiment_term", "neutral"),
-            topics=doc[f"topics_text_{language}"],
-            emotions=doc[f"emotions_text_{language}"],
-            personal_info=doc[f"personal_info_text_{language}"],
             timestamp=datetime.fromisoformat(doc["memory_date"]),
         )
+
+
+async def index_memories(memories: list[Memory], api_key: str) -> None:
+    """
+    Index memories.
+    """
+    if not memories:
+        return
+    logger.info(f"Attempting to index {len(memories)} memories...")
+    bulk_body = []
+    for memory in memories:
+        bulk_body += [
+            {
+                "create": {
+                    "_index": f"memories-{settings.memory_index_version}",
+                    "_id": str(memory.uid),
+                }
+            },
+            await memory.indexable(api_key),
+        ]
+    result = await settings.opensearch_client.bulk(  # noqa
+        body=bulk_body,
+        refresh=True,
+    )
+    # XXX Could look through each individual doc result and handle retries and stuff eventually...
+    logger.success(f"Successfully indexed {len(memories)} memories.")
+
+
+async def search(
+    agent_id: str,
+    session_id: Optional[str] = None,
+    text: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    only_semantic: bool = False,
+    only_keyword: bool = False,
+    date_decay: bool = True,
+    sort: Optional[list[dict[str, str]]] = None,
+    limit: Optional[int] = 10,
+    api_key: str = None,
+) -> tuple[list[dict], dict]:
+    query = {}
+
+    # Detect the language first, so we can use the best field regardless of other params.
+    language = "english" if not text else (detect_language(text) or "english")
+
+    # Hard filters (usernames and date ranges).
+    filters = [{"term": {"agent_id_term": agent_id}}]
+    if start_date:
+        filters.append({"range": {"memory_date": {"gte": start_date.isoformat()}}})
+    if end_date:
+        filters.append({"range": {"memory_date": {"lte": end_date.isoformat()}}})
+    if session_id:
+        filters.append({"term": {"session_id_term": session_id}})
+    bool_filter = {"bool": {"must": filters}}
+
+    # If semantic search is enabled, calculate embeddings and generate KNN search params.
+    semantic_query = None
+    if text and not only_keyword:
+        semantic_query = {
+            "knn": {
+                "embeddings": {
+                    "vector": await generate_embeddings(text, api_key),
+                    "k": limit * 5,
+                }
+            }
+        }
+        if bool_filter:
+            semantic_query["knn"]["embeddings"]["filter"] = bool_filter
+
+    # If keyword search is enabled, build the query with multi-lingual support.
+    keyword_query = None
+    if text and not only_semantic:
+        if language != "english":
+            keyword_query = {
+                "multi_match": {
+                    "query": text,
+                    "fields": [
+                        "default_text",
+                        f"memory_text_{language}",
+                    ],
+                }
+            }
+        else:
+            keyword_query = {
+                "match": {
+                    "default_text": text,
+                },
+            }
+        if bool_filter:
+            keyword_query = {
+                "bool": {
+                    "must": bool_filter["bool"]["must"] + [keyword_query],
+                },
+            }
+
+    # Optionally add a date decay function to boost more recent memories.
+    if date_decay:
+        epoch_date = datetime(year=2025, month=1, day=1)
+        now = datetime.now(UTC).replace(tzinfo=None)
+        keyword_query = {
+            "function_score": {
+                "functions": [
+                    {
+                        "gauss": {
+                            "memory_date": {
+                                "origin": now.isoformat(),
+                                "scale": str(int((now - epoch_date).total_seconds())) + "s",
+                                "decay": 0.7,
+                            },
+                        },
+                    },
+                ],
+                "query": keyword_query,
+            },
+        }
+
+    # Put the whole thing together...
+    if not keyword_query and not semantic_query:
+        if bool_filter:
+            query = bool_filter
+        else:
+            query["match_all"] = ({},)
+    if keyword_query and semantic_query:
+        query = {
+            "hybrid": {
+                "queries": [
+                    semantic_query,
+                    keyword_query,
+                ],
+            },
+        }
+    elif keyword_query:
+        query = keyword_query
+    else:
+        query = semantic_query
+    body = {
+        "query": query,
+        "size": limit,
+        "_source": {"excludes": ["*_knn_*", "embeddings"]},
+        "track_total_hits": True,
+    }
+    if sort:
+        body["sort"] = sort
+
+    response = await settings.opensearch_client.search(
+        index=f"memories-{settings.memory_index_version}",
+        body=body,
+    )
+    memories = [Memory.from_index(doc["_source"]) for doc in response["hits"]["hits"]]
+    return memories, response
 
 
 @alru_cache(maxsize=1)
