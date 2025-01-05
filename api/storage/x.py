@@ -6,7 +6,9 @@ import time
 import uuid
 import opensearchpy
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, UTC
+from typing import Optional
+from pydantic import BaseModel
 from async_lru import alru_cache
 from api.config import settings
 from api.storage.base import (
@@ -14,6 +16,36 @@ from api.storage.base import (
     generate_embeddings,
     generate_template,
 )
+
+
+class Tweet(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    timestamp: datetime
+    quote_count: Optional[int] = 0
+    retweet_count: Optional[int] = 0
+    reply_count: Optional[int] = 0
+    favorite_count: Optional[int] = 0
+    text: str
+    language: Optional[str] = "english"
+    attachments: Optional[list[dict]] = []
+
+    @staticmethod
+    def from_index(doc):
+        return Tweet(
+            id=int(doc["id_num"]),
+            username=doc["username_term"],
+            user_id=int(doc["user_id_term"]),
+            timestamp=datetime.fromisoformat(doc["created_date"]),
+            quote_count=int(doc.get("quote_count_num", 0)),
+            reply_count=int(doc.get("reply_count_num", 0)),
+            retweet_count=int(doc.get("retweet_count_num", 0)),
+            favorite_count=int(doc.get("favorite_count_num", 0)),
+            text=doc["default_text"],
+            language=doc.get("language", "english"),
+            attachments=doc.get("attachments", {}),
+        )
 
 
 STATIC_FIELDS = {
@@ -45,10 +77,13 @@ STATIC_FIELDS = {
         "type": "knn_vector",
         "dimension": 1024,
         "method": {
-            "engine": "nmslib",
-            "space_type": "cosinesimil",
             "name": "hnsw",
-            "parameters": {"ef_construction": 256, "m": 32},
+            "engine": "faiss",
+            "space_type": "l2",
+            "parameters": {
+                "m": 64,
+                "ef_construction": 512,
+            },
         },
     },
 }
@@ -123,6 +158,12 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
     }
     if language != "english":
         doc[f"tweet_text_{language}"] = tweet["text"]
+
+    # Boolean flags for attachment types.
+    for attachment in doc.get("attachments") or []:
+        doc[f"has_{attachment['type']}_bool"] = True
+    if doc.get("attachments"):
+        doc["has_attachment_bool"] = True
 
     # Calculate embeddings.
     if (tweet["text"] or "").strip():
@@ -333,6 +374,133 @@ async def find_and_index_tweets(search: str, api_key: str) -> bool:
     )
     results = [await tweet_to_index_format(t, api_key) for t in inject_usernames(results)]
     await index_tweets(results)
+
+
+async def search(
+    text: Optional[str] = None,
+    usernames: Optional[list[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    only_semantic: bool = False,
+    only_keyword: bool = False,
+    date_decay: bool = True,
+    sort: Optional[list[dict[str, str]]] = None,
+    limit: Optional[int] = 10,
+    has: Optional[list[str]] = [],
+    api_key: str = None,
+) -> tuple[list[dict], dict]:
+    query = {}
+
+    # Detect the language first, so we can use the best field regardless of other params.
+    language = "english" if not text else (detect_language(text) or "english")
+
+    # Hard filters (usernames and date ranges).
+    filters = []
+    if usernames:
+        filters.append({"terms": {"username_term": usernames}})
+    if start_date:
+        filters.append({"range": {"created_date": {"gte": start_date.isoformat()}}})
+    if end_date:
+        filters.append({"range": {"created_date": {"lte": end_date.isoformat()}}})
+    for attachment_type in has:
+        filters.append({"term": {f"has_{attachment_type}_bool": True}})
+    bool_filter = None if not filters else {"bool": {"must": filters}}
+
+    # If semantic search is enabled, calculate embeddings and generate KNN search params.
+    semantic_query = None
+    if text and not only_keyword:
+        semantic_query = {
+            "knn": {
+                "embeddings": {
+                    "vector": await generate_embeddings(text, api_key),
+                    "k": limit * 5,
+                }
+            }
+        }
+        if bool_filter:
+            semantic_query["knn"]["embeddings"]["filter"] = bool_filter
+
+    # If keyword search is enabled, build the query with multi-lingual support.
+    keyword_query = None
+    if text and not only_semantic:
+        if language != "english":
+            keyword_query = {
+                "multi_match": {
+                    "query": text,
+                    "fields": [
+                        "default_text",
+                        f"tweet_text_{language}",
+                    ],
+                }
+            }
+        else:
+            keyword_query = {
+                "match": {
+                    "default_text": text,
+                },
+            }
+        if bool_filter:
+            keyword_query = {
+                "bool": {
+                    "must": bool_filter["bool"]["must"] + [keyword_query],
+                },
+            }
+
+    # Optionally add a date decay function to boost more recent tweets.
+    if date_decay:
+        epoch_date = datetime(year=2025, month=1, day=1)
+        now = datetime.now(UTC).replace(tzinfo=None)
+        keyword_query = {
+            "function_score": {
+                "functions": [
+                    {
+                        "gauss": {
+                            "created_date": {
+                                "origin": now.isoformat(),
+                                "scale": str(int((now - epoch_date).total_seconds())) + "s",
+                                "decay": 0.7,
+                            },
+                        },
+                    },
+                ],
+                "query": keyword_query,
+            },
+        }
+
+    # Put the whole thing together...
+    if not keyword_query and not semantic_query:
+        if bool_filter:
+            query = bool_filter
+        else:
+            query["match_all"] = ({},)
+    if keyword_query and semantic_query:
+        query = {
+            "hybrid": {
+                "queries": [
+                    semantic_query,
+                    keyword_query,
+                ],
+            },
+        }
+    elif keyword_query:
+        query = keyword_query
+    else:
+        query = semantic_query
+    body = {
+        "query": query,
+        "size": limit,
+        "_source": {"excludes": ["*_knn_*", "embeddings"]},
+        "track_total_hits": True,
+    }
+    if sort:
+        body["sort"] = sort
+
+    response = await settings.opensearch_client.search(
+        index=f"tweets-{settings.tweet_index_version}",
+        body=body,
+    )
+    tweets = [Tweet.from_index(doc["_source"]) for doc in response["hits"]["hits"]]
+    return tweets, response
 
 
 @alru_cache(maxsize=1)

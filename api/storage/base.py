@@ -162,6 +162,17 @@ DYNAMIC_NUM_MAPPINGS = {
     },
 }
 
+# Boolean.
+DYNAMIC_BOOL_MAPPINGS = {
+    "standard_bool_field": {
+        "match_mapping_type": "boolean",
+        "match": "*_bool",
+        "mapping": {
+            "type": "boolean",
+        },
+    },
+}
+
 # Combine the mappings values.
 MAPPINGS = {
     "dynamic_templates": (
