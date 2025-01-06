@@ -10,8 +10,8 @@ from datetime import datetime, UTC
 from typing import Optional
 from pydantic import BaseModel
 from async_lru import alru_cache
-from api.config import settings
-from api.storage.base import (
+from squad.config import settings
+from squad.storage.base import (
     detect_language,
     generate_embeddings,
     generate_template,
@@ -388,7 +388,7 @@ async def search(
     limit: Optional[int] = 10,
     has: Optional[list[str]] = [],
     api_key: str = None,
-) -> tuple[list[dict], dict]:
+) -> tuple[list[Tweet], dict]:
     query = {}
 
     # Detect the language first, so we can use the best field regardless of other params.

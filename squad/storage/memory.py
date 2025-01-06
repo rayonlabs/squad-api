@@ -8,11 +8,12 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 from async_lru import alru_cache
-from api.config import settings
-from api.storage.base import (
+from squad.config import settings
+from squad.storage.base import (
     detect_language,
     generate_embeddings,
     generate_template,
+    SUPPORTED_LANGUAGES,
 )
 
 
@@ -81,10 +82,13 @@ class Memory(BaseModel):
         None,
         title="Language",
         description="Language, auto-detected if not specified.",
+        enum=SUPPORTED_LANGUAGES,
     )
     text: str = Field(
         title="Text",
         description="The full text of the memory.",
+        min_length=5,
+        max_length=20000,
     )
     timestamp: datetime = Field(
         default_factory=datetime.utcnow,
