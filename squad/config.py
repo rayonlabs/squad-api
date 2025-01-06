@@ -7,6 +7,7 @@ import redis.asyncio as redis
 from opensearchpy import AsyncOpenSearch
 from tweepy.asynchronous import AsyncClient
 from pydantic_settings import BaseSettings
+from squad.aiosession import SessionManager
 
 
 class Settings(BaseSettings):
@@ -27,6 +28,10 @@ class Settings(BaseSettings):
     tweepy_client: AsyncClient = AsyncClient(os.getenv("X_API_TOKEN"))
     opensearch_client: AsyncOpenSearch = AsyncOpenSearch(
         os.getenv("OPENSEARCH", "http://127.0.0.1:9200")
+    )
+    brave_sm: SessionManager = SessionManager(
+        headers={"X-Subscription-Token": os.getenv("BRAVE_API_TOKEN")},
+        base_url="https://api.search.brave.com",
     )
 
     # Tweet storage.
