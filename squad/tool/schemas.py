@@ -14,7 +14,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import validates
 from squad.database import Base, generate_uuid
-from squad.tool.validator import CodeValidator
 
 
 class Tool(Base):
@@ -31,34 +30,40 @@ class Tool(Base):
     @validates("code")
     def validate_code(self, _, code):
         """
-        Minimally validates user-provided tool code.
+        Minimally validate user-provided tools.
+          - Checks for syntax errors
+          - Ensures exactly one tool class is defined
+          - Verifies the tool class inherits from smolagents.Tool
         """
         try:
             tree = ast.parse(code)
-            if not isinstance(tree.body[0], ast.FunctionDef):
+            tool_classes = [item for item in tree.body if isinstance(item, ast.ClassDef)]
+            if len(tool_classes) != 1:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Code must define exactly one function.",
+                    detail="Code must define exactly one tool class!",
                 )
-            validator = CodeValidator(allowed_functions)
-            validator.visit(tree)
-            if validator.function_name is None:
+
+            # Check class inheritance
+            tool_class = tool_classes[0]
+            has_tool_base = False
+            for base in tool_class.bases:
+                if isinstance(base, ast.Name) and base.id == "Tool":
+                    has_tool_base = True
+                    break
+                elif isinstance(base, ast.Attribute):
+                    if isinstance(base.value, ast.Name):
+                        if base.value.id == "smolagents" and base.attr == "Tool":
+                            has_tool_base = True
+                            break
+            if not has_tool_base:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Code must define exactly one function.",
+                    detail="Tool class must inherit from smolagents.Tool",
                 )
-            try:
-                compile(code, "<string>", "exec")
-            except SyntaxError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Code syntax error: {str(e)}",
-                )
-            if validator.errors:
-                raise HTTPException(
-                    status=status.HTTP_400_BAD_REQUEST,
-                    detail="Validation errors encountered: {validator.errors}",
-                )
+
+            # Check if code compiles
+            compile(code, "<string>", "exec")
         except SyntaxError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -68,7 +73,7 @@ class Tool(Base):
             if isinstance(e, HTTPException):
                 raise
             raise HTTPException(
-                status=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Unexpected validation error: {e}",
             )
-        self.code = code
+        return code

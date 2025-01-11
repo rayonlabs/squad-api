@@ -30,6 +30,7 @@ redis = "^5.2.1"
 async-lru = "^2.0.4"
 oauthlib = "^3.2.2"
 munch = "^4.0.0"
+smolagents = "^1.1.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.5"
