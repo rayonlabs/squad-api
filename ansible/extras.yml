@@ -1,0 +1,42 @@
+- name: Enable k8s extras
+  hosts: squad-0
+  become: yes
+  tasks:
+    - name: Enable community plugins and third-party helm charts
+      shell: |
+        microk8s enable community || (sleep 10 && microk8s enable community) || true
+        microk8s helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/ || true
+        microk8s helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+        microk8s helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ || true
+        microk8s helm repo update
+      ignore_errors: yes
+
+    - name: Install Prometheus
+      shell: |
+        microk8s helm upgrade --install prometheus prometheus-community/prometheus \
+          --namespace squad \
+          --create-namespace \
+          --set server.persistentVolume.enabled=false \
+          --set alertmanager.persistentVolume.enabled=false \
+          --set prometheus-pushgateway.persistentVolume.enabled=false \
+          --set prometheus-server.persistentVolume.enabled=false \
+          --set alertmanager.persistence.enabled=false \
+          --set server.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set alertmanager.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set pushgateway.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set kubeStateMetrics.nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }}
+
+    - name: Install metrics server
+      shell: |
+        microk8s helm upgrade --install metrics-server metrics-server/metrics-server \
+          --namespace kube-system \
+          --set nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set persistence.enabled=false
+
+    - name: Install kubernetes dashboard
+      shell: |
+        microk8s helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard \
+          --create-namespace \
+          --namespace kubernetes-dashboard \
+          --set nodeSelector."kubernetes\.io/hostname"={{ inventory_hostname }} \
+          --set persistence.enabled=false

@@ -1,0 +1,17 @@
+all:
+  vars:
+    # This is your SSH public key, e.g. cat ~/.ssh/id_rsa.pub
+    ssh_keys:
+      - "ssh-rsa AAAA... user@hostnane"
+    # The username you want to use to login to those machines (and your public key will be added to).
+    user: billybob
+    # The initial username to login with, for fresh nodes that may not have your username setup.
+    ansible_user: ubuntu
+    # SSH sometimes just hangs without this...
+    ansible_ssh_common_args: '-o ControlPath=none'
+    ansible_ssh_retries: 3
+
+  hosts:
+    squad-0:
+      ansible_host: 1.2.3.4
+      internal_ip: 100.64.0.2
