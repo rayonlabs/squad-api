@@ -5,6 +5,7 @@ Storage/retrieval/settings/etc. for X (tweets? WTF are they called now?)
 import time
 import uuid
 import opensearchpy
+import orjson as json
 from loguru import logger
 from datetime import datetime, UTC
 from typing import Optional
@@ -27,6 +28,7 @@ class Tweet(BaseModel):
     retweet_count: Optional[int] = 0
     reply_count: Optional[int] = 0
     favorite_count: Optional[int] = 0
+    user_followers: Optional[int] = 0
     text: str
     language: Optional[str] = "english"
     attachments: Optional[list[dict]] = []
@@ -37,6 +39,7 @@ class Tweet(BaseModel):
             id=int(doc["id_num"]),
             username=doc["username_term"],
             user_id=int(doc["user_id_term"]),
+            user_followers=int(doc.get("user_followers_num", 0)),
             timestamp=datetime.fromisoformat(doc["created_date"]),
             quote_count=int(doc.get("quote_count_num", 0)),
             reply_count=int(doc.get("reply_count_num", 0)),
@@ -89,19 +92,38 @@ STATIC_FIELDS = {
 }
 
 
+async def get_user(username: str) -> dict:
+    """
+    Get a user by username from X API.
+    """
+    if (cached := await settings.redis_client.get(f"x:user:{username}")) is not None:
+        if cached == "__none__":
+            return None
+        return json.loads(cached)
+    result = await settings.tweepy_client.get_user(username=username, user_fields="public_metrics,description,created_at,protected")
+    if not result.data:
+        await settings.redis_client.set(f"x:user:{username}", "__none__", ex=10 * 60)
+        return None
+    user = {
+        "id": result.data.id,
+        "name": result.data.name,
+        "created_at": result.data.created_at,
+        "description": result.data.description,
+        "protected": result.data.protected,
+        "public_metrics": result.data.public_metrics,
+    }
+    await settings.redis_client.set(f"x:user:{username}", json.dumps(user), ex=24 * 60 * 60)
+    return result
+
+
 async def username_to_user_id(username: str) -> int:
     """
     Twitter needs to search based on user IDs (integer), so we need to get that mapping.
     """
-    cached = await settings.redis_client.get(f"x:username_to_id:{username}")
-    if cached:
-        return int(cached)
-
-    result = await settings.tweepy_client.get_user(username=username)
-    if not result.data:
-        return None
-    await settings.redis_client.set(f"kaito:username_to_id:{username}", str(result.data.id))
-    return int(result.data.id)
+    if (user := await get_user(username)) is not None:
+        print(json.dumps(user))
+        return int(user["id"])
+    return None
 
 
 def inject_usernames(results: list[dict]) -> list[dict]:
@@ -143,6 +165,7 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
         if not tweet["text"] or not tweet["text"].strip()
         else detect_language(tweet["text"])
     )
+    user = await get_user(tweet["username"])
     doc = {
         "id_num": tweet["id"],
         "user_id_term": tweet["author_id"],
@@ -152,6 +175,7 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
         "reply_count_num": metrics.get("reply_count", 0),
         "retweet_count_num": metrics.get("retweet_count", 0),
         "favorite_count_num": metrics.get("like_count", 0),
+        "user_followers_num": (user or {}).get("public_metrics", {}).get("followers_count", 0) or 0,
         "default_text": tweet["text"],
         "language": language,
         "attachments": tweet.get("attachments"),
