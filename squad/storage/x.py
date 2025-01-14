@@ -100,7 +100,9 @@ async def get_user(username: str) -> dict:
         if cached == "__none__":
             return None
         return json.loads(cached)
-    result = await settings.tweepy_client.get_user(username=username, user_fields="public_metrics,description,created_at,protected")
+    result = await settings.tweepy_client.get_user(
+        username=username, user_fields="public_metrics,description,created_at,protected"
+    )
     if not result.data:
         await settings.redis_client.set(f"x:user:{username}", "__none__", ex=10 * 60)
         return None

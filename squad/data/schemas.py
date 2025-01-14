@@ -1,0 +1,241 @@
+"""
+Pydantic models for storage requests (from agents).
+"""
+
+from pydantic import BaseModel, Field, validator, root_validator, constr
+from typing import Optional, List, Dict
+from datetime import datetime
+from squad.storage.base import SUPPORTED_LANGUAGES
+
+
+class BraveSearchParams(BaseModel):
+    q: str = Field(
+        min_length=1,
+        max_length=400,
+        description="The search query string",
+    )
+    country: Optional[str] = Field(
+        default=None,
+        description=(
+            "The search query country, where the results come from. "
+            "The country string is limited to 2 character country codes of supported countries."
+        ),
+    )
+    search_lang: Optional[str] = Field(
+        default=None,
+        description=(
+            "The search language preference. "
+            "The 2 or more character language code for which the search results are provided."
+        ),
+    )
+    ui_lang: Optional[str] = Field(
+        default=None,
+        description=(
+            "User interface language preferred in response. "
+            "Usually of the format ‘<language_code>-<country_code>’."
+        ),
+    )
+    count: int = Field(
+        default=10,
+        ge=1,
+        le=20,
+        description=(
+            "The number of search results returned in response. "
+            "The actual number delivered may be less than requested. "
+            "Combine this parameter with offset to paginate search results."
+        ),
+    )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "The zero based offset that indicates number of search results per page (count) to skip before returning the result. "
+            "The maximum is 9. The actual number delivered may be less than requested based on the query."
+        ),
+    )
+    safesearch: str = Field(
+        default="moderate",
+        pattern="^(strict|moderate|off)$",
+        description=(
+            "Filters search results for adult content. "
+            "The following values are supported: "
+            "off: No filtering is done, "
+            "moderate: Filters explicit content, like images and videos, but allows adult domains in the search results, "
+            "strict: Drops all adult content from search results"
+        ),
+    )
+    freshness: Optional[str] = Field(
+        default=None,
+        description=(
+            "Filters search results by when they were discovered. "
+            "The following values are supported: "
+            "pd: Discovered within the last 24 hours, "
+            "pw: Discovered within the last 7 Days, "
+            "pm: Discovered within the last 31 Days, "
+            "py: Discovered within the last 365 Days, "
+            "YYYY-MM-DDtoYYYY-MM-DD: timeframe is also supported by specifying the date range e.g. 2022-04-01to2022-07-30."
+        ),
+    )
+    text_decorations: bool = Field(
+        default=False,
+        description="Whether display strings (e.g. result snippets) should include decoration markers (e.g. highlighting characters).",
+    )
+    spellcheck: bool = Field(
+        default=False,
+        description=(
+            "Whether to spellcheck provided query. "
+            "If the spellchecker is enabled, the modified query is always used for search. "
+            "The modified query can be found in altered key from the query response model."
+        ),
+    )
+    result_filter: Optional[str] = Field(
+        default=None,
+        description=(
+            "A comma delimited string of result types to include in the search response, "
+            "e.g. 'web,discussions,locations'"
+        ),
+    )
+    units: str = Field(
+        default="imperial",
+        pattern="^(imperial|metric)$",
+        description=(
+            "Unit system for displaying measurements in results. "
+            "Possible values are: "
+            "metric: The standardized measurement system, "
+            "imperial: The British Imperial system of units."
+        ),
+    )
+    extra_snippets: bool = (
+        Field(
+            default=False,
+            description="Include up to 5 additional exceptions from the search results.",
+        ),
+    )
+    summary: bool = Field(default=False, description="Whether to include result summaries")
+
+    class Config:
+        extra = "forbid"
+
+
+class BaseSearchArgs(BaseModel):
+    text: Optional[str] = Field(default=None, description="Text to search for")
+    start_date: Optional[datetime] = Field(
+        default=None,
+        description="Optional start date filter",
+    )
+    end_date: Optional[datetime] = Field(
+        default=None,
+        description="Optional end date filter",
+    )
+    only_semantic: bool = Field(default=False, description="Whether to use only semantic search")
+    only_keyword: bool = Field(default=False, description="Whether to use only keyword search")
+    date_decay: bool = Field(
+        default=True, description="Whether to apply date decay to search results"
+    )
+    sort: Optional[List[Dict[str, str]]] = Field(
+        default=None, description="List of sort criteria with field and direction"
+    )
+    limit: Optional[int] = Field(
+        default=10, ge=1, le=100, description="Maximum number of search results to return"
+    )
+
+    @root_validator
+    def validate_search_modes(cls, values):
+        only_semantic = values.get("only_semantic")
+        only_keyword = values.get("only_keyword")
+        if only_semantic and only_keyword:
+            raise ValueError("Cannot set both only_semantic and only_keyword to True")
+        return values
+
+    @validator("start_date", "end_date")
+    def validate_dates(cls, v, values, field):
+        if field.name == "end_date" and v and values.get("start_date"):
+            if v < values["start_date"]:
+                raise ValueError("end_date must be after start_date")
+        return v
+
+    @validator("sort")
+    def validate_sort_format(cls, v):
+        if v is not None:
+            valid_directions = {"asc", "desc"}
+            for sort_item in v:
+                if not isinstance(sort_item, dict) or len(sort_item) != 1:
+                    raise ValueError(
+                        "Each sort item must be a dictionary with exactly one key-value pair"
+                    )
+                for direction in sort_item.values():
+                    if direction.lower() not in valid_directions:
+                        raise ValueError(f"Sort direction must be one of {valid_directions}")
+        return v
+
+    class Config:
+        extra = "forbid"
+
+
+class XSearchParams(BaseSearchArgs):
+    usernames: Optional[List[constr(regex=r"^[A-Za-z0-9_\.\-]{1,20}$")]] = Field(
+        default=None,
+        max_length=20,
+        description="List of usernames to filter tweets by (maximum 20 usernames).",
+    )
+    has: Optional[List[str]] = Field(
+        default=[],
+        max_length=5,
+        description="List of features that tweets must contain, e.g. ['image']",
+    )
+
+
+class MemoryArgs(BaseModel):
+    session_id: Optional[str] = Field(
+        None,
+        pattern="^[a-z0-9\-]{1,64}$",
+        title="Session UID",
+        description="UID of the session, or None for global memories.",
+    )
+    meta: dict[str, str] = Field(
+        {},
+        title="Metadata",
+        description="Arbitrary key/value metadata (not searchable).",
+    )
+    language: str = Field(
+        None,
+        title="Language",
+        description="Language, auto-detected if not specified.",
+        enum=SUPPORTED_LANGUAGES,
+    )
+    text: str = Field(
+        title="Text",
+        description="The full text of the memory.",
+        min_length=5,
+        max_length=20000,
+    )
+    timestamp: datetime = Field(
+        default_factory=datetime.utcnow,
+        title="Timestamp",
+        description="Timestamp of this memory.",
+    )
+    created_from: str = Field(
+        None,
+        title="Source material summary",
+        description="Brief summary of the source the memory was generated from.",
+    )
+
+
+class MemorySearchArgs(BaseSearchArgs):
+    session_id: Optional[str] = Field(
+        None,
+        pattern="^[a-z0-9\-]{1,64}$",
+        title="Session UID",
+        description="UID of the session, or None for global memories.",
+    )
+    language: str = Field(
+        None,
+        title="Language",
+        description="Language, auto-detected if not specified.",
+        enum=SUPPORTED_LANGUAGES,
+    )
+    created_from: str = Field(
+        None,
+        title="Source material summary",
+        description="Brief summary of the source the memory was generated from.",
+    )
