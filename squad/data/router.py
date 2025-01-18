@@ -5,8 +5,9 @@ Router to handle storage related tools (X, brave, memories).
 from fastapi import APIRouter, Depends, Header
 from squad.auth import User, get_current_user
 from squad.config import settings
-from squad.data.schemas import BraveSearchParams, XSearchParams, MemorySearchParams
+from squad.data.schemas import BraveSearchParams, XSearchParams, MemorySearchParams, MemoryArgs
 from squad.storge.x import search as x_search
+from squad.storage.memory import Memory
 from squad.storage.memory import search as memory_search
 
 router = APIRouter()
@@ -45,3 +46,14 @@ async def perform_memory_search(
     params["agent_id"] = agent_id
     params["api_key"] = authorization
     return await memory_search(**params)
+
+
+@router.post("/memories")
+async def create_memory(
+    memory_args: MemoryArgs,
+    agent_id: str = Header(None, alias="X-Agent-ID"),
+    authorization: str = Header(None, alias="Authorization"),
+    current_user: User = Depends(get_current_user()),
+):
+    memory = Memory(agent_id=agent_id, **memory_args.model_dump())
+    return await {"memory_id": memory.uid}

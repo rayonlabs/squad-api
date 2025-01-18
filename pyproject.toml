@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "chutes-agents"
+name = "squad-api"
 version = "0.0.1"
 description = "Agents, on chutes.ai"
 authors = ["Jon Durbin <jon@jondurbin.com>", "namoray <namoray@rayonlabs.ai>"]
