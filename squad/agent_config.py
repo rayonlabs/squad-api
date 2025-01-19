@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     authorization: str = os.getenv("CHUTES_API_TOKEN")
     default_image_model: str = os.getenv("DEFAULT_IMAGE_MODEL", "FLUX.1-schnell")
+    default_vlm_model: str = os.getenv("DEFAULT_VLM_MODEL", "OpenGVLab/InternVL2_5-78B")
     default_text_gen_model: str = os.getenv(
         "DEFAULT_TEXT_GEN_MODEL", "nvidia/Llama-3.1-405B-Instruct-FP8"
     )
