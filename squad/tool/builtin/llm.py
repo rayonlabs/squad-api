@@ -1,14 +1,13 @@
 import re
-import os
 import openai
 from smolagents import Tool
-
-DEFAULT_TEXT_GEN_MODEL = os.getenv("DEFAULT_TEXT_GEN_MODEL", "nvidia/Llama-3.1-405B-Instruct-FP8")
-CHUTES_API_KEY = os.getenv("CHUTES_API_KEY")
+from squad.agent_config import settings
 
 
 def llm_tool(
-    model: str = DEFAULT_TEXT_GEN_MODEL,
+    model: str = settings.default_text_gen_model,
+    tool_name: str = None,
+    tool_description: str = None,
     endpoint: str = "chat",
     system_prompt: str = None,
     temperature: float = 0.7,
@@ -19,18 +18,25 @@ def llm_tool(
     Helper to return dynamically created LLM tool classes.
     """
 
-    function_name = "llm_" + re.sub(r"[^a-z0-9_]", "_", model.lower())
-    function_name = re.sub("_+", "_", function_name)
-    function_name = function_name.rstrip("_")
-    clazz_name = "LLM" + "".join(word.capitalize() for word in function_name[4:].split("_"))
+    if not tool_name:
+        tool_name = "llm_" + re.sub(r"[^a-z0-9_]", "_", model.lower())
+        tool_name = re.sub("_+", "_", tool_name)
+        tool_name = tool_name.rstrip("_")
+        clazz_name = "LLM" + "".join(word.capitalize() for word in tool_name[4:].split("_"))
+    else:
+        clazz_name = "LLM" + "".join(word.capitalize() for word in tool_name.split("_"))
+    if not tool_description:
+        tool_description = (
+            f"This is a tool that can call LLM {model} to generate text output from text prompts."
+        )
 
     class DynamicLLMTool(Tool):
-        name = function_name
-        description = f"This is a tool that can call LLM {model} to generate text output."
+        name = tool_name
+        description = tool_description
         inputs = {
             "prompt": {
                 "type": "string",
-                "description": "The prompt generate text/invoke the LLM with.",
+                "description": "The prompt to generate text/invoke the LLM with.",
             },
         }
         output_type = "string"
@@ -63,7 +69,7 @@ def llm_tool(
                 call_args["prompt"] = prompt
             client = openai.OpenAI(
                 base_url="https://llm.chutes.ai/v1",
-                api_key=CHUTES_API_KEY,
+                api_key=settings.authorization,
             )
             method = client.chat.completions if endpoint == "chat" else client.completions
             result = method.create(**call_args)
