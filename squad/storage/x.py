@@ -115,7 +115,7 @@ async def get_user(username: str) -> dict:
         "public_metrics": result.data.public_metrics,
     }
     await settings.redis_client.set(f"x:user:{username}", json.dumps(user), ex=24 * 60 * 60)
-    return result
+    return user
 
 
 async def username_to_user_id(username: str) -> int:

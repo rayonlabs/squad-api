@@ -16,8 +16,8 @@ from sqlalchemy.orm import validates
 from squad.database import Base, generate_uuid
 
 
-class Tool(Base):
-    __tablename__ = "tools"
+class CustomTool(Base):
+    __tablename__ = "custom_tools"
     tool_id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)
     code = Column(String, nullable=False)

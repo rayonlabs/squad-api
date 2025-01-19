@@ -29,10 +29,12 @@ class Agent(Base):
     system_prompt = Column(String, nullable=True)
 
     # X auth.
+    x_user_id = Column(String, nullable=True)
     x_access_token = Column(String, nullable=True)
     x_refresh_token = Column(String, nullable=True)
     X_expires_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Timestamps.
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)

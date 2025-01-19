@@ -33,6 +33,10 @@ munch = "^4.0.0"
 smolagents = "^1.1.0"
 aiocache = "^0.12.3"
 fastapi-cache2 = "^0.2.2"
+filetype = "^1.2.0"
+pydub = "^0.25.1"
+markdownify = "^0.14.1"
+playwright = "^1.49.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.5"
