@@ -3,7 +3,6 @@ import re
 import requests
 import tempfile
 from PIL import Image
-from pydub import AudioSegment
 from playwright.sync_api import sync_playwright
 from markdownify import markdownify
 from smolagents import Tool
@@ -114,59 +113,13 @@ class WebsiteScreenshotter(Tool):
                 browser.close()
 
 
-class ImageDownloader(Tool):
-    name = "download_image"
-    description = "This is a tool to download images from remote URLs, if the detected content type of the URL is image/*"
+class Downloader(Tool):
+    name = "download"
+    description = "This is a tool to the content of remote URLs, when the content is not text/*, e.g. images, audio, video, etc, returning the local path of the downloaded content."
     inputs = {
         "url": {
             "type": "string",
-            "description": "URL of the image to download",
-        }
-    }
-    output_type = "image"
-
-    def forward(self, url: str):
-        response = requests.get(url)
-        if response.status_code < 400:
-            assert response.headers.get("Content-Type", "").lower().startswith("image/")
-            return Image(response.content)
-        else:
-            raise Exception("Failed to download!")
-
-
-class AudioDownloader(Tool):
-    name = "download_audio"
-    description = "This is a tool to download audio from remote URLs, if the detected content type of the URL is audio/*"
-    inputs = {
-        "url": {
-            "type": "string",
-            "description": "URL of the audio to download",
-        }
-    }
-    output_type = "audio"
-
-    def forward(self, url: str):
-        response = requests.get(url)
-        if response.status_code < 400:
-            ctype = response.headers.get("Content-Type", "").lower()
-            assert ctype.startswith("audio/")
-            audio = AudioSegment.from_file(
-                io.BytesIO(response.content), format=ctype.split("/")[-1]
-            )
-            wav_io = io.BytesIO()
-            audio.export(wav_io, format="wav")
-            return wav_io.getvalue()
-        else:
-            raise Exception("Failed to download!")
-
-
-class VideoDownloader(Tool):
-    name = "download_video"
-    description = "This is a tool to download audio from remote URLs, returning a path to local file, if the detected content type of the URL is video/*"
-    inputs = {
-        "url": {
-            "type": "string",
-            "description": "URL of the video to download",
+            "description": "URL of the content to download",
         }
     }
     output_type = "string"
@@ -174,8 +127,6 @@ class VideoDownloader(Tool):
     def forward(self, url: str):
         response = requests.get(url, stream=True)
         if response.status_code < 400:
-            ctype = response.headers.get("Content-Type", "").lower()
-            assert ctype.startswith("video/")
             with tempfile.NamedTemporaryFile(mode="wb", delete=False) as outfile:
                 for chunk in response.iter_content(chunk_size=8192):
                     outfile.write(chunk)
