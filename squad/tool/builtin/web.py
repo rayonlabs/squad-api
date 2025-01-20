@@ -30,7 +30,9 @@ class ContentTypeTool(Tool):
 class WebsiteFetcher(Tool):
     name = "visit_webpage"
     description = (
-        "Visits a webpage, waits for dynamic content to load, and returns content as markdown."
+        "Visits a webpage, waits for dynamic content to load, and returns content as markdown. "
+        "This tool should always be used when trying to extract information from the web, rather than "
+        "relying on search results/summary information."
     )
     inputs = {"url": {"type": "string", "description": "Webpage URL to visit"}}
     output_type = "string"
