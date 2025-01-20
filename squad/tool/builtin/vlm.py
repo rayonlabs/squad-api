@@ -73,6 +73,11 @@ def vlm_tool(
                     "model": model,
                     "temperature": temperature,
                     "messages": [],
+                    "stop": [
+                        "<|im_end|>",
+                        "<|end_of_text|>",
+                        "</s>",
+                    ]
                 },
                 **kwargs,
             }
