@@ -6,6 +6,9 @@ class User(BaseModel):
     username: str
 
 
-async def get_current_user():
+def get_current_user():
     # XXX TODO
-    return None
+    async def _authenticate():
+        return None
+
+    return _authenticate

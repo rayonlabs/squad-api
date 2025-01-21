@@ -13,7 +13,7 @@ from squad.aiosession import SessionManager
 class Settings(BaseSettings):
     # PG
     sqlalchemy: str = os.getenv(
-        "POSTGRESQL", "postgresql+asyncpg://user:password@127.0.0.1:5432/chutes"
+        "POSTGRESQL", "postgresql+asyncpg://user:password@127.0.0.1:5432/squad"
     )
     db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "256"))
     db_overflow: int = int(os.getenv("DB_OVERFLOW", "32"))

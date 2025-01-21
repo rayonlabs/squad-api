@@ -220,7 +220,7 @@ class MemoryArgs(BaseModel):
     )
 
 
-class MemorySearchArgs(BaseSearchArgs):
+class MemorySearchParams(BaseSearchArgs):
     session_id: Optional[str] = Field(
         None,
         pattern=r"^[a-z0-9\-]{1,64}$",

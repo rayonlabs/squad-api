@@ -1,8 +1,7 @@
 import re
-import io
 import requests
+import tempfile
 from squad.agent_config import settings
-from PIL import Image
 from smolagents import Tool
 
 
@@ -30,7 +29,8 @@ def image_tool(
         clazz_name = "IMG" + "".join(word.capitalize() for word in tool_name.split("_"))
     if not tool_description:
         tool_description = (
-            f"This is a tool that can generate images with {model} from text prompts."
+            f"This is a tool that can generate images with {model} from text prompts. "
+            "The output is a string: the path to the image (webp format) saved to local disk."
         )
 
     class DynamicImageTool(Tool):
@@ -42,7 +42,7 @@ def image_tool(
                 "description": "The prompt to generate the image with.",
             },
         }
-        output_type = "image"
+        output_type = "string"
 
         def forward(self, prompt: str) -> str:
             nonlocal model, height, width, num_inference_steps, guidance_scale, seed, kwargs
@@ -65,6 +65,8 @@ def image_tool(
                 },
             )
             result.raise_for_status()
-            return Image.open(io.BytesIO(result.content))
+            with tempfile.NamedTemporaryFile(mode="wb", suffix=".webp", delete=False) as tmpfile:
+                tmpfile.write(result.content)
+                return tmpfile.name
 
     return type(clazz_name, (DynamicImageTool,), {})
