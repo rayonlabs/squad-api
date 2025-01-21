@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header
 from squad.auth import User, get_current_user
 from squad.config import settings
 from squad.data.schemas import BraveSearchParams, XSearchParams, MemorySearchParams, MemoryArgs
-from squad.storge.x import search as x_search
+from squad.storage.x import search as x_search
 from squad.storage.memory import Memory
 from squad.storage.memory import search as memory_search
 
@@ -32,7 +32,8 @@ async def perform_x_search(
 ):
     params = search.dict()
     params["api_key"] = authorization
-    return await x_search(**params)
+    _, results = await x_search(**params)
+    return [doc["_source"] for doc in results["hits"]["hits"]]
 
 
 @router.post("/memory/search")

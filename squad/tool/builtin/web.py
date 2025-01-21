@@ -1,16 +1,42 @@
+import os
 import io
 import re
 import requests
 import tempfile
+from contextlib import contextmanager
+from bs4 import BeautifulSoup
 from PIL import Image
 from playwright.sync_api import sync_playwright
 from markdownify import markdownify
 from smolagents import Tool
+from squad.data.schemas import BraveSearchParams
 
 
-class ContentTypeTool(Tool):
+@contextmanager
+def get_browser(user_agent: str = None, viewport: dict[str, int] = None):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--disable-http2"])
+        context = browser.new_context(
+            user_agent=user_agent
+            or "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            viewport=viewport or {"width": 1920, "height": 1080},
+            java_script_enabled=True,
+            has_touch=True,
+            locale="en-US",
+            timezone_id="America/New_York",
+        )
+        page = context.new_page()
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => false});
+            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+        """)
+        yield browser, page
+
+
+class ContentTyper(Tool):
     name = "check_url_content_type"
-    description = "This is a tool that sends a HEAD request to a remote URL and returns the Content-Type header from the response."
+    description = "Tool to check the content type of a remote URL, if it is not clear what the content type may be, e.g. to check if it's an image, audio, etc."
     inputs = {
         "url": {
             "type": "string",
@@ -20,58 +46,71 @@ class ContentTypeTool(Tool):
     output_type = "string"
 
     def forward(self, url: str):
-        response = requests.head(url)
-        if response.status_code < 400:
-            return response.headers.get("Content-Type")
-        else:
-            raise Exception("Failed to retrieve Content-Type header!")
+        try:
+            response = requests.head(url)
+            if response.status_code < 400:
+                return response.headers.get("Content-Type")
+        except Exception as exc:
+            print(f"Failed to determine content type of {url}: {exc}")
+        return "Could not determine content type."
 
 
 class WebsiteFetcher(Tool):
     name = "visit_webpage"
     description = (
-        "Visits a webpage, waits for dynamic content to load, and returns content as markdown. "
-        "This tool should always be used when trying to extract information from the web, rather than "
-        "relying on search results/summary information."
+        "Tool to fetch the content of URLs. "
+        "This tool is particularly useful in extracting information from direct source material to answer questions, "
+        "and must always be used subsequent to web search results unless the task is specifically to perform a web search only."
     )
-    inputs = {"url": {"type": "string", "description": "Webpage URL to visit"}}
+    inputs = {
+        "url": {
+            "type": "string",
+            "description": "Webpage URL to visit",
+        },
+        "selector": {
+            "type": "string",
+            "nullable": True,
+            "description": "BeautifulSoup selector, to filter specific items/types of items from the resulting HTML content, e.g. 'img' to find images, 'a' to find links, etc.",
+        },
+    }
     output_type = "string"
 
-    def forward(self, url: str) -> str:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                viewport={"width": 1920, "height": 1080},
-                java_script_enabled=True,
-                has_touch=True,
-                locale="en-US",
-                timezone_id="America/New_York",
-            )
-            page = context.new_page()
-            page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {get: () => false});
-                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-            """)
+    def forward(self, url: str, selector: str = None) -> str:
+        with get_browser() as (browser, page):
+            return_value = "Website could not be fetched: {url}"
             try:
                 page.goto(url, wait_until="networkidle", timeout=10000)
                 html = page.content()
-                markdown_content = markdownify(html).strip()
-                return re.sub(r"\n{3,}", "\n\n", markdown_content)
-            except Exception:
+                if not selector:
+                    markdown_content = markdownify(html).strip()
+                    return_value = re.sub(r"\n{3,}", "\n\n", markdown_content)
+                else:
+                    return_value = html
+            except Exception as exc:
                 # Fallback to requests static/no JS fetch.
-                response = requests.get(url)
-                response.raise_for_status()
-                markdown_content = markdownify(response.text).strip()
-                return re.sub(r"\n{3,}", "\n\n", markdown_content)
+                print(f"Error fetching {url} with chrome: {exc}")
+                try:
+                    response = requests.get(url, timeout=10000)
+                    response.raise_for_status()
+                    markdown_content = markdownify(response.text).strip()
+                    return_value = re.sub(r"\n{3,}", "\n\n", markdown_content)
+                except Exception as fallback_exc:
+                    print(f"Error fetching {url} with fallback: {fallback_exc}")
             finally:
                 browser.close()
+            if selector:
+                soup = BeautifulSoup(return_value, "html.parser")
+                try:
+                    elements = soup.select(selector)
+                    return_value = "\n".join([str(element) for element in elements])
+                except Exception as exc:
+                    print(f"Error parsing selector '{selector}': {exc}")
+            return return_value
 
 
 class WebsiteScreenshotter(Tool):
     name = "screenshot_webpage"
-    description = "Visits a webpage, waits for dynamic content to load, and takes a screenshot."
+    description = "Tool to generate images from URLs, by visiting the URL with a headless browser and taking a screenshot after dynamic content has loaded."
     inputs = {
         "url": {
             "type": "string",
@@ -79,45 +118,34 @@ class WebsiteScreenshotter(Tool):
         },
         "mobile": {
             "type": "boolean",
+            "nullable": True,
             "description": "simulate mobile browser view instead of standard/desktop",
         },
     }
     output_type = "image"
 
-    def forward(self, url: str, mobile: bool) -> str:
+    def forward(self, url: str, mobile: bool = False) -> str:
         user_agent = (
             "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
             if mobile
             else "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         )
         viewport = {"width": 390, "height": 844} if mobile else {"width": 1920, "height": 1080}
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent=user_agent,
-                viewport=viewport,
-                java_script_enabled=True,
-                has_touch=True,
-                locale="en-US",
-                timezone_id="America/New_York",
-            )
-            page = context.new_page()
-            page.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {get: () => false});
-                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-            """)
+        with get_browser(user_agent=user_agent, viewport=viewport) as (browser, page):
             try:
                 page.goto(url, wait_until="networkidle", timeout=10000)
                 screenshot = page.screenshot()
                 return Image.open(io.BytesIO(screenshot))
+            except Exception as exc:
+                print(f"Screenshot could not be generated: {exc}")
             finally:
                 browser.close()
+            return None
 
 
 class Downloader(Tool):
     name = "download"
-    description = "This is a tool to the content of remote URLs, when the content is not text/*, e.g. images, audio, video, etc, returning the local path of the downloaded content."
+    description = "Tool to download the contents of a remote URL, when the content type of the remote URL is something other than text, e.g. images, videos, audio files, etc."
     inputs = {
         "url": {
             "type": "string",
@@ -135,3 +163,68 @@ class Downloader(Tool):
                 return outfile.name
         else:
             raise Exception("Failed to download!")
+
+
+class WebSearcher(Tool):
+    name = "web_search"
+    description = (
+        "Tool for performing web searches to find URLs and summary information related to a topic. "
+        "The search results MUST NOT BE USED DIRECTLY to answer questions; the URLs linked MUST be visisted to find the full context for the answer."
+    )
+    inputs = {
+        "q": {
+            "type": "string",
+            "description": "search query string to use when performing the search",
+        },
+        "extra_arguments": {
+            "type": "object",
+            "description": (
+                "Optional search flags/settings to augment, limit, or filter results. "
+                "Must be passed as a dict with key value pairs, where values are always strings. "
+                "Supported extra_argument values are the following (but do not include 'q'): "
+                f"{BraveSearchParams.model_json_schema()}"
+            ),
+            "nullable": True,
+        },
+    }
+    output_type = "string"
+
+    def forward(self, q: str, extra_arguments: dict = {}):
+        params = {"q": q}
+        params.update(extra_arguments)
+        result = requests.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params=params,
+            headers={"x-subscription-token": os.getenv("BRAVE_API_TOKEN")},
+        )
+        result.raise_for_status()
+        search_results = result.json()["web"]["results"]
+        summary_keys = [
+            "title",
+            "url",
+            "description",
+            "age",
+            "page_age",
+            "subtype",
+            "extra_snippets",
+        ]
+        summary = []
+        for item in search_results:
+            summary_data = {
+                key: value if isinstance(value, str) else "\n".join(value)
+                for key, value in item.items()
+                if key in summary_keys
+            }
+            for key in summary_keys:
+                value = summary_data.get(key)
+                if not value:
+                    continue
+                summary.append(f"{key}: {value}")
+            if item.get("thumbnail"):
+                summary.append(f"image: {item['thumbnail']['original']}")
+            if item.get("video") and item["video"].get("thumbnail", {}).get("original"):
+                summary.append(
+                    f"video: {item['video'].get('duration', 'unknown duration')} thumbnail: {item['video']['thumbnail']['original']}"
+                )
+            summary.append("---")
+        return "\n".join(summary)

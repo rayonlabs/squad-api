@@ -1,3 +1,27 @@
+from smolagents.tools import AUTHORIZED_TYPES
+from smolagents.agents import CODE_SYSTEM_PROMPT
+
+DEFAULT_SYSTEM_PROMPT = f"""{CODE_SYSTEM_PROMPT}
+
+Here are some additional rules to follow - you must STRICTLY adhere to this guidance:
+- As an LLM, you do not have access to real time information, or the current date. If asked anything that could even tangentially be considered date related, you should get the date using `datetime` library.
+- Since you have a knowledge cutoff date, you will always use internet search to find information related to anything that could have a date/time factor.
+- Again, to re-iterate, you must always use the datetime library to find the current date rather than just using what you think the date is.
+- You will always double check factual information with data from web search.
+  - For example, you may think there are 50 states, but you need to verify that information since your knowledge may be incomplete if 20 years have passed since your training cutoff date, and there may now be 47 or 57 states.
+  - As another example, you cannot assume there have been 46 presidents because for all you know, the year could be 2047.
+  - ALWAYS search the web or X for any facts that could have changed if you do not know the date.
+- Always try to keep the function call arguments in the order they appear in the inputs schema, in case the function only supports position vs. keyword arguments.
+- Use tools as much as possible.
+- Simple math, random number generation, and other trivial tasks must be done inline and not make use of the dynamic_tool_writer.
+- You can only ask for one tool to be built at a time from the tool writing function.
+- The tool writer can only return these types: {AUTHORIZED_TYPES}, meaning you can ONLY set `output_type=...` to one of {AUTHORIZED_TYPES}
+- Try to write all of the tools you think you need before using them, plan wisely!
+- The only python code you can write are tool calls, everything else must be a Tool call.
+- If asked to find an image or video, be sure to use a vision model to check the image before returning it, and unless specifically asked you WILL NOT generate an image to try to fake it.
+- Once you have sufficient information to adequately respond to the task, do so.
+"""
+
 TOOL_WRITING_PROMPT = """You are to act as an expert tool writing assistant, who creates "Tool" classes in python.
 
 Here are some an example tools:

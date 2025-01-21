@@ -123,7 +123,6 @@ async def username_to_user_id(username: str) -> int:
     Twitter needs to search based on user IDs (integer), so we need to get that mapping.
     """
     if (user := await get_user(username)) is not None:
-        print(json.dumps(user))
         return int(user["id"])
     return None
 
@@ -425,9 +424,25 @@ async def search(
     if usernames:
         filters.append({"terms": {"username_term": usernames}})
     if start_date:
-        filters.append({"range": {"created_date": {"gte": start_date.isoformat()}}})
+        filters.append(
+            {
+                "range": {
+                    "created_date": {
+                        "gte": start_date if isinstance(start_date, str) else start_date.isoformat()
+                    }
+                }
+            }
+        )
     if end_date:
-        filters.append({"range": {"created_date": {"lte": end_date.isoformat()}}})
+        filters.append(
+            {
+                "range": {
+                    "created_date": {
+                        "lte": end_date if isinstance(end_date, str) else end_date.isoformat()
+                    }
+                }
+            }
+        )
     for attachment_type in has:
         filters.append({"term": {f"has_{attachment_type}_bool": True}})
     bool_filter = None if not filters else {"bool": {"must": filters}}
@@ -520,7 +535,6 @@ async def search(
     }
     if sort:
         body["sort"] = sort
-
     response = await settings.opensearch_client.search(
         index=f"tweets-{settings.tweet_index_version}",
         body=body,

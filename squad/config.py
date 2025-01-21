@@ -34,6 +34,9 @@ class Settings(BaseSettings):
         base_url="https://api.search.brave.com",
     )
 
+    # Squad API.
+    squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://127.0.0.1:8000")
+
     # Tweet storage.
     tweet_index_version: int = int(os.getenv("TWEET_INDEX_VERSION", "0"))
     tweet_index_shards: int = int(os.getenv("TWEET_INDEX_SHARDS", "1"))

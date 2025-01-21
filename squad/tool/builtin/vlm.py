@@ -31,7 +31,11 @@ def vlm_tool(
     else:
         clazz_name = "VLM" + "".join(word.capitalize() for word in tool_name.split("_"))
     if not tool_description:
-        tool_description = f"This is a tool that can call VLM {model} to generate text output from a prompt and one or more images."
+        tool_description = (
+            f"This is a tool that can call VLM {model} to generate text output from a prompt and one or more images. "
+            "Due to privacy concerns, these VLMs CANNOT identify or speculate on the identity of specific people. "
+            "You WILL NOT EVER USE THIS TOOL TO IDENTIFY SPECIFIC PEOPLE."
+        )
 
     class DynamicVLMTool(Tool):
         name = tool_name

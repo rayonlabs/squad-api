@@ -2,7 +2,7 @@
 Pydantic models for storage requests (from agents).
 """
 
-from pydantic import BaseModel, Field, validator, root_validator, constr
+from pydantic import BaseModel, Field, field_validator, model_validator, constr
 from typing import Optional, List, Dict
 from datetime import datetime
 from squad.storage.base import SUPPORTED_LANGUAGES
@@ -105,11 +105,8 @@ class BraveSearchParams(BaseModel):
             "imperial: The British Imperial system of units."
         ),
     )
-    extra_snippets: bool = (
-        Field(
-            default=False,
-            description="Include up to 5 additional exceptions from the search results.",
-        ),
+    extra_snippets: bool = Field(
+        default=False, description="Include up to 5 additional excerpts from the search results."
     )
     summary: bool = Field(default=False, description="Whether to include result summaries")
 
@@ -139,7 +136,7 @@ class BaseSearchArgs(BaseModel):
         default=10, ge=1, le=100, description="Maximum number of search results to return"
     )
 
-    @root_validator
+    @model_validator(mode="after")
     def validate_search_modes(cls, values):
         only_semantic = values.get("only_semantic")
         only_keyword = values.get("only_keyword")
@@ -147,14 +144,16 @@ class BaseSearchArgs(BaseModel):
             raise ValueError("Cannot set both only_semantic and only_keyword to True")
         return values
 
-    @validator("start_date", "end_date")
-    def validate_dates(cls, v, values, field):
-        if field.name == "end_date" and v and values.get("start_date"):
-            if v < values["start_date"]:
+    @field_validator("start_date", "end_date")
+    def validate_dates(cls, v, info):  # Changed parameters here
+        field_name = info.field_name
+        data = info.data
+        if field_name == "end_date" and v and data.get("start_date"):
+            if v < data["start_date"]:
                 raise ValueError("end_date must be after start_date")
         return v
 
-    @validator("sort")
+    @field_validator("sort")
     def validate_sort_format(cls, v):
         if v is not None:
             valid_directions = {"asc", "desc"}
@@ -173,7 +172,7 @@ class BaseSearchArgs(BaseModel):
 
 
 class XSearchParams(BaseSearchArgs):
-    usernames: Optional[List[constr(regex=r"^[A-Za-z0-9_\.\-]{1,20}$")]] = Field(
+    usernames: Optional[List[constr(pattern=r"^[A-Za-z0-9_\.\-]{1,20}$")]] = Field(
         default=None,
         max_length=20,
         description="List of usernames to filter tweets by (maximum 20 usernames).",
@@ -181,14 +180,14 @@ class XSearchParams(BaseSearchArgs):
     has: Optional[List[str]] = Field(
         default=[],
         max_length=5,
-        description="List of features that tweets must contain, e.g. ['image']",
+        description="List of features that tweets must contain, allowed values are 'photo', 'video', 'animated_gif'",
     )
 
 
 class MemoryArgs(BaseModel):
     session_id: Optional[str] = Field(
         None,
-        pattern="^[a-z0-9\-]{1,64}$",
+        pattern=r"^[a-z0-9\-]{1,64}$",
         title="Session UID",
         description="UID of the session, or None for global memories.",
     )
@@ -224,7 +223,7 @@ class MemoryArgs(BaseModel):
 class MemorySearchArgs(BaseSearchArgs):
     session_id: Optional[str] = Field(
         None,
-        pattern="^[a-z0-9\-]{1,64}$",
+        pattern=r"^[a-z0-9\-]{1,64}$",
         title="Session UID",
         description="UID of the session, or None for global memories.",
     )

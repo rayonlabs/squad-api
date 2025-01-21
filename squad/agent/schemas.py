@@ -13,6 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import validates
+from sqlalchemy.dialects.postgresql import ARRAY
 from squad.database import Base, generate_uuid
 
 
@@ -33,6 +34,10 @@ class Agent(Base):
     x_access_token = Column(String, nullable=True)
     x_refresh_token = Column(String, nullable=True)
     X_expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Usernames and keywords to follow.
+    x_follow_users = Column(ARRAY(String), nullable=True)
+    x_follow_keywords = Column(ARRAY(String), nullable=True)
 
     # Timestamps.
     created_at = Column(DateTime(timezone=True), server_default=func.now())
