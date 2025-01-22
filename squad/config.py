@@ -3,6 +3,7 @@ Application-wide settings.
 """
 
 import os
+from typing import Optional
 import redis.asyncio as redis
 from opensearchpy import AsyncOpenSearch
 from tweepy.asynchronous import AsyncClient
@@ -20,18 +21,28 @@ class Settings(BaseSettings):
 
     # Redis.
     redis_url: str = os.getenv("REDIS_URL", "redis://:redispassword@redis:6379/0")
-    redis_client: redis.Redis = redis.Redis.from_url(
-        os.getenv("REDIS_URL", "redis://:redispassword@redis:6379/0")
+    redis_client: Optional[redis.Redis] = (
+        redis.Redis.from_url(os.getenv("REDIS_URL", "redis://:redispassword@redis:6379/0"))
+        if os.getenv("REDIS_URL")
+        else None
     )
 
     # Clients.
-    tweepy_client: AsyncClient = AsyncClient(os.getenv("X_API_TOKEN"))
-    opensearch_client: AsyncOpenSearch = AsyncOpenSearch(
-        os.getenv("OPENSEARCH_URL", "http://opensearch:9200")
+    tweepy_client: Optional[AsyncClient] = (
+        AsyncClient(os.getenv("X_API_TOKEN")) if os.getenv("X_API_TOKEN") else None
     )
-    brave_sm: SessionManager = SessionManager(
-        headers={"X-Subscription-Token": os.getenv("BRAVE_API_TOKEN")},
-        base_url="https://api.search.brave.com",
+    opensearch_client: Optional[AsyncOpenSearch] = (
+        AsyncOpenSearch(os.getenv("OPENSEARCH_URL", "http://opensearch:9200"))
+        if os.getenv("OPENSEARCH_URL")
+        else None
+    )
+    brave_sm: Optional[SessionManager] = (
+        SessionManager(
+            headers={"X-Subscription-Token": os.getenv("BRAVE_API_TOKEN")},
+            base_url="https://api.search.brave.com",
+        )
+        if os.getenv("BRAVE_API_TOKEN")
+        else None
     )
 
     # Squad API.

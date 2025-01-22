@@ -1,3 +1,4 @@
+import os
 import requests
 from smolagents import Tool
 from squad.data.schemas import XSearchParams
@@ -59,21 +60,35 @@ class XTweeter(Tool):
             "description": "ID of the tweet/X post this is a reply to, if it is a reply",
             "nullable": True,
         },
-        "image": {
+        "media": {
             "type": "string",
             "nullable": True,
-            "description": "Full path to an image to include as attachment in the post.",
-        },
-        "video": {
-            "type": "string",
-            "nullable": True,
-            "description": "Full path to a video file to include as an attachment in the post.",
+            "description": "Full path to an image or video file to include as attachment in the post.",
         },
     }
     output_type = "string"
 
-    def forward(self, text: str, in_reply_to: str = None, image: str = None, video: str = None):
-        print("TODO: create a tweet: {text=} {attachments=} {in_reply_to=}")
+    def forward(self, text: str, in_reply_to: str = None, media: str = None):
+        print(f"Trying to create a tweet:\n\t{text=}\n\t{media=}")
+        form_data = {
+            "text": ("", text),
+        }
+        if in_reply_to:
+            form_data["in_reply_to"] = ("", in_reply_to)
+        if media:
+            with open(media, "rb") as infile:
+                file_bytes = infile.read()
+                filename = os.path.basename(media)
+                form_data["media"] = (filename, file_bytes)
+        response = requests.post(
+            f"{settings.squad_api_base_url}/x/tweet",
+            files=form_data,
+            headers={
+                "Authorization": settings.authorization,
+            },
+        )
+        response.raise_for_status()
+        return f"Successfully tweeted: {response.text}"
 
 
 class XFollower(Tool):
@@ -88,7 +103,15 @@ class XFollower(Tool):
     output_type = "string"
 
     def forward(self, user_id: str):
-        print("TODO: follow user {user_id}")
+        response = requests.post(
+            f"{settings.squad_api_base_url}/x/follow",
+            json={"user_id": user_id},
+            headers={
+                "Authorization": settings.authorization,
+            },
+        )
+        response.raise_for_status()
+        return f"Successfully followed {user_id=}: {response.text}"
 
 
 class XLiker(Tool):
@@ -102,8 +125,16 @@ class XLiker(Tool):
     }
     output_type = "string"
 
-    def forward(self, user_id: str):
-        print("TODO: like tweet {tweet_id}")
+    def forward(self, tweet_id: str):
+        response = requests.post(
+            f"{settings.squad_api_base_url}/x/like",
+            json={"tweet_id": tweet_id},
+            headers={
+                "Authorization": settings.authorization,
+            },
+        )
+        response.raise_for_status()
+        return f"Successfully liked {tweet_id=}: {response.text}"
 
 
 class XRetweeter(Tool):
@@ -118,7 +149,15 @@ class XRetweeter(Tool):
     output_type = "string"
 
     def forward(self, tweet_id: str):
-        print("TODO: retweet {tweet_id}")
+        response = requests.post(
+            f"{settings.squad_api_base_url}/x/retweet",
+            json={"tweet_id": tweet_id},
+            headers={
+                "Authorization": settings.authorization,
+            },
+        )
+        response.raise_for_status()
+        return f"Successfully retweeted {tweet_id=}: {response.text}"
 
 
 class XQuoteTweeter(Tool):
@@ -137,4 +176,12 @@ class XQuoteTweeter(Tool):
     output_type = "string"
 
     def forward(self, tweet_id: str, text: str):
-        print("TODO: quote tweet {tweet_id} with {text=}")
+        response = requests.post(
+            f"{settings.squad_api_base_url}/x/like",
+            json={"tweet_id": tweet_id, "text": text},
+            headers={
+                "Authorization": settings.authorization,
+            },
+        )
+        response.raise_for_status()
+        return f"Successfully quote tweeted {tweet_id=}: {response.text}"
