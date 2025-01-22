@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "256"))
     db_overflow: int = int(os.getenv("DB_OVERFLOW", "32"))
 
+    # AES secret
+    aes_secret: str = os.getenv(
+        "AES_SECRET", "5692fd23e56b9f10f7d6223ebdbd26580ce04fec21a966891d34c9f7f28d9413"
+    )
+
     # Redis.
     redis_url: str = os.getenv("REDIS_URL", "redis://:redispassword@redis:6379/0")
     redis_client: Optional[redis.Redis] = (

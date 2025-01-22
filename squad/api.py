@@ -60,7 +60,7 @@ async def lifespan(_: FastAPI):
     await initialize_memory()
 
     # Manual DB migrations.
-    migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
+    migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "migrations")
     if not os.path.exists(migrations_dir) or not glob.glob(os.path.join(migrations_dir, "*.sql")):
         logger.info(f"No migrations to run (yet): {migrations_dir}")
         yield

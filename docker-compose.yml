@@ -25,6 +25,7 @@ services:
       context: .
     volumes:
       - ./squad:/app/squad
+      - ./migrations:/app/migrations
     environment:
       - POSTGRESQL=postgresql+asyncpg://user:password@postgres:5432/squad
       - REDIS_URL=redis://:redispassword@redis:6379/0
