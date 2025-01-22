@@ -9,6 +9,11 @@ from squad.tool.builtin.web import (
     Downloader,
     WebSearcher,
 )
+from squad.tool.builtin.memory import (
+    memory_searcher,
+    memory_creator,
+    memory_eraser,
+)
 from squad.tool.builtin.x import (
     #    XTweeter,
     #    XFollower,

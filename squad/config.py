@@ -13,21 +13,21 @@ from squad.aiosession import SessionManager
 class Settings(BaseSettings):
     # PG
     sqlalchemy: str = os.getenv(
-        "POSTGRESQL", "postgresql+asyncpg://user:password@127.0.0.1:5432/squad"
+        "POSTGRESQL", "postgresql+asyncpg://user:password@postgres:5432/squad"
     )
     db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "256"))
     db_overflow: int = int(os.getenv("DB_OVERFLOW", "32"))
 
     # Redis.
-    redis_url: str = os.getenv("REDIS_URL", "redis://:redispassword@127.0.0.1:6379/0")
+    redis_url: str = os.getenv("REDIS_URL", "redis://:redispassword@redis:6379/0")
     redis_client: redis.Redis = redis.Redis.from_url(
-        os.getenv("REDIS_URL", "redis://:redispassword@127.0.0.1:6379/0")
+        os.getenv("REDIS_URL", "redis://:redispassword@redis:6379/0")
     )
 
     # Clients.
     tweepy_client: AsyncClient = AsyncClient(os.getenv("X_API_TOKEN"))
     opensearch_client: AsyncOpenSearch = AsyncOpenSearch(
-        os.getenv("OPENSEARCH", "http://127.0.0.1:9200")
+        os.getenv("OPENSEARCH_URL", "http://opensearch:9200")
     )
     brave_sm: SessionManager = SessionManager(
         headers={"X-Subscription-Token": os.getenv("BRAVE_API_TOKEN")},
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     )
 
     # Squad API.
-    squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://127.0.0.1:8000")
+    squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://api:8000")
 
     # Tweet storage.
     tweet_index_version: int = int(os.getenv("TWEET_INDEX_VERSION", "0"))

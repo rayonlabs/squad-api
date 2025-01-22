@@ -35,6 +35,7 @@ services:
     depends_on:
       - postgres
       - redis
+      - opensearch
 
   opensearch:
     environment:

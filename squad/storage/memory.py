@@ -2,6 +2,7 @@
 Arbitrary (user-defined) memories, which can be conversation data, knowledge bank items, etc.
 """
 
+import re
 import uuid
 from loguru import logger
 from typing import Optional
@@ -175,11 +176,14 @@ async def search(
     sort: Optional[list[dict[str, str]]] = None,
     limit: Optional[int] = 10,
     api_key: str = None,
+    language: str = None,
+    **kwargs,
 ) -> tuple[list[dict], dict]:
     query = {}
 
     # Detect the language first, so we can use the best field regardless of other params.
-    language = "english" if not text else (detect_language(text) or "english")
+    if not language:
+        language = "english" if not text else (detect_language(text) or "english")
 
     # Hard filters (usernames and date ranges).
     filters = [{"term": {"agent_id_term": agent_id}}]
@@ -279,13 +283,43 @@ async def search(
     }
     if sort:
         body["sort"] = sort
+    import json
 
+    print(json.dumps(body, indent=2))
     response = await settings.opensearch_client.search(
         index=f"memories-{settings.memory_index_version}",
         body=body,
     )
     memories = [Memory.from_index(doc["_source"]) for doc in response["hits"]["hits"]]
     return memories, response
+
+
+async def delete(agent_id: str, memory_id: str) -> dict:
+    """
+    Delete a memory.
+    """
+    assert isinstance(memory_id, str) and re.match(r"^[a-f0-9-]+$", memory_id)
+    return await settings.opensearch_client.delete_by_query(
+        index=f"memories-{settings.memory_index_version}",
+        body={
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "term": {
+                                "agent_id": agent_id,
+                            },
+                        },
+                        {
+                            "term": {
+                                "uid_term": memory_id,
+                            },
+                        },
+                    ],
+                },
+            },
+        },
+    )
 
 
 @alru_cache(maxsize=1)
@@ -307,6 +341,7 @@ async def initialize():
         logger.info(f"Index already exists: {index_name}")
         return True
     if not await settings.opensearch_client.indices.exists_index_template(template_name):
+        logger.info(f"Creating index template: {template_name}")
         await settings.opensearch_client.indices.put_index_template(
             name=template_name,
             body=template,
@@ -316,5 +351,6 @@ async def initialize():
         )
     else:
         logger.info(f"Index template already exists: {template_name}")
+    logger.info(f"Performing empty PUT to /{index_name} to bootstrap index...")
     await settings.opensearch_client.http.put(f"/{index_name}")
     return True

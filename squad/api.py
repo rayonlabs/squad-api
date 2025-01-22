@@ -19,6 +19,10 @@ from squad.data.router import router as data_router
 from squad.database import Base, engine
 from squad.config import settings
 
+# Initializers for opensearch indices.
+from squad.storage.x import initialize as initialize_x
+from squad.storage.memory import initialize as initialize_memory
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -30,16 +34,6 @@ async def lifespan(_: FastAPI):
     # Normal table creation stuff.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    # Manual DB migrations.
-    migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
-    if not os.path.exists(migrations_dir) or not glob.glob(os.path.join(migrations_dir, "*.sql")):
-        logger.info(f"No migrations to run (yet): {migrations_dir}")
-        yield
-        return
-    db_url = quote(settings.sqlalchemy.replace("+asyncpg", ""), safe=":/@")
-    if "127.0.0.1" in db_url or "@postgres:" in db_url:
-        db_url += "?sslmode=disable"
 
     # dbmate migrations, make sure we only run them in a single process since we use workers > 1
     worker_pid_file = "/tmp/api.pid"
@@ -60,6 +54,20 @@ async def lifespan(_: FastAPI):
     if not is_migration_process:
         yield
         return
+
+    # Initialize indices.
+    await initialize_x()
+    await initialize_memory()
+
+    # Manual DB migrations.
+    migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations")
+    if not os.path.exists(migrations_dir) or not glob.glob(os.path.join(migrations_dir, "*.sql")):
+        logger.info(f"No migrations to run (yet): {migrations_dir}")
+        yield
+        return
+    db_url = quote(settings.sqlalchemy.replace("+asyncpg", ""), safe=":/@")
+    if "127.0.0.1" in db_url or "@postgres:" in db_url:
+        db_url += "?sslmode=disable"
 
     # Run the migrations.
     process = await asyncio.create_subprocess_exec(

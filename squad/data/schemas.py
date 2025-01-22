@@ -138,9 +138,7 @@ class BaseSearchArgs(BaseModel):
 
     @model_validator(mode="after")
     def validate_search_modes(cls, values):
-        only_semantic = values.get("only_semantic")
-        only_keyword = values.get("only_keyword")
-        if only_semantic and only_keyword:
+        if values.only_semantic and values.only_keyword:
             raise ValueError("Cannot set both only_semantic and only_keyword to True")
         return values
 
