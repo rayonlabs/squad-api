@@ -5,9 +5,6 @@ import requests
 import tempfile
 from smolagents import Tool
 from squad.agent_config import settings
-from transformers import AutoTokenizer
-
-TOKENIZER = AutoTokenizer.from_pretrained("jondurbin/bagel-8b-v1.0")
 
 
 def merge_wavs(wav_files):

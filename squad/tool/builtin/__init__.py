@@ -1,6 +1,7 @@
 # ruff: noqa
 from smolagents import Tool
 from squad.tool.builtin.dangerzone import DangerousDynamo
+from squad.tool.builtin.transcribe import TranscribeTool
 from squad.tool.builtin.web import (
     ContentTyper,
     WebsiteFetcher,
