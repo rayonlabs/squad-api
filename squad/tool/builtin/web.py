@@ -79,7 +79,10 @@ class WebsiteFetcher(Tool):
         with get_browser() as (browser, page):
             return_value = "Website could not be fetched: {url}"
             try:
-                page.goto(url, wait_until="networkidle", timeout=10000)
+                try:
+                    page.goto(url, wait_until="networkidle", timeout=10000)
+                except TimeoutError:
+                    ...
                 html = page.content()
                 if not selector:
                     markdown_content = markdownify(html).strip()

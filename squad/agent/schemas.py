@@ -32,8 +32,7 @@ class Agent(Base):
     # X auth.
     x_user_id = Column(String, nullable=True)
     x_access_token = Column(String, nullable=True)
-    x_refresh_token = Column(String, nullable=True)
-    X_expires_at = Column(DateTime(timezone=True), nullable=True)
+    x_access_token_secret = Column(String, nullable=True)
 
     # Usernames and keywords to follow.
     x_follow_users = Column(ARRAY(String), nullable=True)
