@@ -44,3 +44,97 @@ class XSearcher(Tool):
             response.append(tweet_str)
             response.append("---")
         return "\n".join(response)
+
+
+class XTweeter(Tool):
+    name = "x_tweet"
+    description = "Tool for creating an X post (aka tweet)."
+    inputs = {
+        "text": {
+            "type": "string",
+            "description": "search query string to use when performing the search",
+        },
+        "in_reply_to": {
+            "type": "string",
+            "description": "ID of the tweet/X post this is a reply to, if it is a reply",
+            "nullable": True,
+        },
+        "image": {
+            "type": "string",
+            "nullable": True,
+            "description": "Full path to an image to include as attachment in the post.",
+        },
+        "video": {
+            "type": "string",
+            "nullable": True,
+            "description": "Full path to a video file to include as an attachment in the post.",
+        },
+    }
+    output_type = "string"
+
+    def forward(self, text: str, in_reply_to: str = None, image: str = None, video: str = None):
+        print("TODO: create a tweet: {text=} {attachments=} {in_reply_to=}")
+
+
+class XFollower(Tool):
+    name = "x_follow"
+    description = "Tool for following another user on X/twitter."
+    inputs = {
+        "user_id": {
+            "type": "string",
+            "description": "ID of the user to follow",
+        },
+    }
+    output_type = "string"
+
+    def forward(self, user_id: str):
+        print("TODO: follow user {user_id}")
+
+
+class XLiker(Tool):
+    name = "x_like"
+    description = "Tool to 'like' a post on X/twitter."
+    inputs = {
+        "tweet_id": {
+            "type": "string",
+            "description": "ID of the tweet to like",
+        },
+    }
+    output_type = "string"
+
+    def forward(self, user_id: str):
+        print("TODO: like tweet {tweet_id}")
+
+
+class XRetweeter(Tool):
+    name = "x_retweet"
+    description = "Tool for re-tweeting a tweet, with no additional text/comment just a re-tweet."
+    inputs = {
+        "tweet_id": {
+            "type": "string",
+            "description": "ID of the tweet to re-tweet",
+        },
+    }
+    output_type = "string"
+
+    def forward(self, tweet_id: str):
+        print("TODO: retweet {tweet_id}")
+
+
+class XQuoteTweeter(Tool):
+    name = "x_quote_tweet"
+    description = "Tool for re-tweeting a tweet with additional comments/text."
+    inputs = {
+        "tweet_id": {
+            "type": "string",
+            "description": "ID of the tweet to re-tweet",
+        },
+        "text": {
+            "type": "string",
+            "description": "The text you want to add with the retweet, i.e. your comments on the original post",
+        },
+    }
+    output_type = "string"
+
+    def forward(self, tweet_id: str, text: str):
+        print("TODO: quote tweet {tweet_id} with {text=}")

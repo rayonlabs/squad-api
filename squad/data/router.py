@@ -2,7 +2,8 @@
 Router to handle storage related tools (X, brave, memories).
 """
 
-from fastapi import APIRouter, Depends, Header
+from pydantic import ValidationError
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from squad.auth import User, get_current_user
 from squad.config import settings
 from squad.data.schemas import (
@@ -54,7 +55,7 @@ async def perform_memory_search(
     params["agent_id"] = agent_id
     params["api_key"] = authorization
     _, raw = await memory_search(**params)
-    return raw["hits"]["hits"]
+    return [doc["_source"] for doc in raw["hits"]["hits"]]
 
 
 @router.post("/memories")
@@ -64,9 +65,15 @@ async def create_memory(
     authorization: str = Header(None, alias="Authorization"),
     current_user: User = Depends(get_current_user()),
 ):
-    memory = Memory(agent_id=agent_id, **memory_args.model_dump())
+    try:
+        memory = Memory(agent_id=agent_id, **memory_args.model_dump())
+    except ValidationError as exc:
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
     await index_memories([memory], authorization)
-    return await {"memory_id": memory.uid}
+    return {"memory_id": memory.uid}
 
 
 @router.delete("/memories/{memory_id}")

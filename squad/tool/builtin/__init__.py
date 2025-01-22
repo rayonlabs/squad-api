@@ -15,12 +15,11 @@ from squad.tool.builtin.memory import (
     memory_eraser,
 )
 from squad.tool.builtin.x import (
-    #    XTweeter,
-    #    XFollower,
-    #    XLiker,
-    #    XMuter,
-    #    XRetweeter,
-    #    XQuoteTweeter,
+    XTweeter,
+    XFollower,
+    XLiker,
+    XRetweeter,
+    XQuoteTweeter,
     XSearcher,
 )
 from squad.tool.builtin.llm import llm_tool

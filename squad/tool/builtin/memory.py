@@ -75,18 +75,22 @@ def memory_searcher(
                     "X-Agent-ID": settings.agent_id,
                 },
             )
-            print(f"GOT THIS MEMORY SEARCH RESPONSE: {raw_response}\n{raw_response.text}")
             memories = [Memory.from_index(item) for item in raw_response.json()]
             response = []
             for memory in memories:
-                memory_str = "\n".join(
-                    [f"{key}: {value}" for key, value in memory.model_dump().items() if value]
-                )
-                response.append(memory_str)
+                display = []
+                for key, value in memory.model_dump().items():
+                    if not value:
+                        continue
+                    if key == "uid":
+                        display.append(f"memory_id: {value}")
+                    elif key not in ["agent_id", "language"]:
+                        display.append(f"{key}: {value}")
+                response.append("\n".join(display))
                 response.append("---")
             if not response:
                 print("No memories yet.")
-                return "No memories exist yet, create a firstimpression memory."
+                return "No memories exist yet, you should create a memory with text='firstimpression: ...' if appropriate."
             return "\n".join(response)
 
         def _static_forward(self, text: str, extra_arguments: dict = {}):
@@ -130,9 +134,11 @@ def memory_creator(
             "For example, if the task says something like 'I like purple.', you would call this function with 'Color preference: purple' or something similar. "
             "Memories should generally be quite succinct and information dense. "
             "If there are very important facts, or personal information/details shared, birthdays, important events, etc., you may want to create memories as well. "
-            "If someone requests a very rude, hateful, happy, or otherwise emotionally charged task, you may wish to create a memory of that interaction and form an immediate, long-term opinion of that user. "
+            "If someone requests a very rude, hateful, happy, or otherwise emotionally charged task, and you don't already have a memory indicating this pattern, "
+            "you may wish to create a memory of that interaction and form an immediate, long-term opinion of that user. "
             "If you don't already have a first impression of a user, create a memory with: 'firstimpression: ...' "
-            "Be sure to include all facts, details, information relevant so that in complete isolation, the thing you wanted to remember could be retrieved from the text."
+            "Be sure to include all facts, details, information relevant so that in complete isolation, the thing you wanted to remember could be retrieved from the text. "
+            "Never create duplicate memories, ESPECIALLY firstimpression memorie, those should be singular."
         )
 
     class DynamicMemoryCreator(Tool):
@@ -146,7 +152,7 @@ def memory_creator(
             "extra_arguments": {
                 "type": "object",
                 "description": (
-                    "Optional search flags/settings to augment, limit, or filter results. "
+                    "Optional parameters to set on the memory, not required. "
                     "Must be passed as a dict with key value pairs, where values are always strings. "
                     "Supported extra_argument values are the following (but do not include 'text' or 'session_id'): "
                     f"{MemoryArgs.model_json_schema()}"
@@ -173,15 +179,20 @@ def memory_creator(
             if session_id:
                 params.update({"session_id": session_id})
             params.update(extra_arguments)
-            response = requests.post(
-                f"{settings.squad_api_base_url}/data/memories",
-                json=params,
-                headers={
-                    "Authorization": settings.authorization,
-                    "X-Agent-ID": settings.agent_id,
-                },
-            ).json()
-            return f"Created memory: {response['memory_id']}"
+            try:
+                response = requests.post(
+                    f"{settings.squad_api_base_url}/data/memories",
+                    json=params,
+                    headers={
+                        "Authorization": settings.authorization,
+                        "X-Agent-ID": settings.agent_id,
+                    },
+                )
+                response.raise_for_status()
+                return f"Memory has been created: memory_id = {response.json()['memory_id']}"
+            except Exception as exc:
+                print(f"Failed to create memory: {exc}")
+            return "Failed to create the memory!"
 
         def _static_forward(self, text: str, extra_arguments: dict = {}):
             return self._session_forward(

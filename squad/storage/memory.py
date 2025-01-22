@@ -79,7 +79,7 @@ class Memory(BaseModel):
         title="Metadata",
         description="Arbitrary key/value metadata (not searchable).",
     )
-    language: str = Field(
+    language: Optional[str] = Field(
         None,
         title="Language",
         description="Language, auto-detected if not specified.",
@@ -96,7 +96,7 @@ class Memory(BaseModel):
         title="Timestamp",
         description="Timestamp of this memory.",
     )
-    created_from: str = Field(
+    created_from: Optional[str] = Field(
         None,
         title="Source material summary",
         description="Brief summary of the source the memory was generated from.",
@@ -283,9 +283,7 @@ async def search(
     }
     if sort:
         body["sort"] = sort
-    import json
 
-    print(json.dumps(body, indent=2))
     response = await settings.opensearch_client.search(
         index=f"memories-{settings.memory_index_version}",
         body=body,
