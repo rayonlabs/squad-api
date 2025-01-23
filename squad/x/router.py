@@ -2,29 +2,48 @@
 Router for X interactions.
 """
 
-import json
+import time
 import tweepy
 from functools import lru_cache
 from typing import Optional
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, status, Request
+from fastapi.responses import RedirectResponse
 from squad.auth import get_current_agent
 from squad.config import settings
 from squad.util import encrypt, decrypt
 from squad.database import get_db_session
 from squad.agent.schemas import Agent
+from squad.agent_config import settings as agent_settings
 
 router = APIRouter()
 
 
 @lru_cache(maxsize=1)
 def oauth_handler():
-    return tweepy.OAuthHandler(
-        settings.x_api_key,
-        settings.x_api_secret,
-        callback=settings.x_api_callback_url,
+    return tweepy.OAuth2UserHandler(
+        client_id=settings.x_client_id,
+        redirect_uri=settings.x_api_callback_url,
+        scope=[
+            "tweet.read",
+            "tweet.write",
+            "users.read",
+            "follows.read",
+            "follows.write",
+            "like.read",
+            "like.write",
+            "mute.read",
+            "mute.write",
+            "block.read",
+            "block.write",
+            "offline.access",
+            "media.write",
+            "bookmark.read",
+            "bookmark.write",
+        ],
+        client_secret=settings.x_client_secret,
     )
 
 
@@ -41,81 +60,76 @@ class QuoteTweetRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=400)
 
 
-async def _store_request_token(oauth_token: str, token_data: dict):
-    await settings.redis_client.setex(f"x:request_token:{oauth_token}", 300, json.dumps(token_data))
-
-
-async def _get_request_token(oauth_token: str):
-    token_data = await settings.redis_client.get(f"x:request_token:{oauth_token}")
-    return json.loads(token_data) if token_data else None
-
-
 @router.get("/auth")
 async def get_oauth_url():
     oauth = oauth_handler()
     auth_url = oauth.get_authorization_url()
-    request_token = oauth.request_token
-    await _store_request_token(request_token["oauth_token"], request_token)
-    return {"auth_url": auth_url}
+    return RedirectResponse(url=auth_url)
 
 
 @router.get("/callback")
 async def oauth_callback(
-    oauth_token: str,
-    oauth_verifier: str,
+    code: str,
+    state: str,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
 ):
     oauth = oauth_handler()
-    if (request_token := await _get_request_token(oauth_token)) is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not find auth request token, try login flow again.",
-        )
-    oauth.request_token = request_token
     try:
-        access_token, access_token_secret = oauth.get_access_token(oauth_verifier)
-        client = tweepy.Client(
-            consumer_key=settings.x_api_key,
-            consumer_secret=settings.x_api_secret,
-            access_token=access_token,
-            access_token_secret=access_token_secret,
-        )
-        user = client.get_me()
+        access_token = oauth.fetch_token(request.url._url)
+        client = tweepy.Client(access_token["access_token"])
+        user = client.get_me(user_auth=False)
         user_id = str(user.data.id)
-
         agent = (
             (await db.execute(select(Agent).where(Agent.x_user_id == user_id)))
             .unique()
             .scalar_one_or_none()
         )
-        if not agent:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No agent has been created for user {user_id}, please create an agent first.",
+        if agent:
+            agent.x_access_token = await encrypt(access_token["access_token"])
+            agent.x_refresh_token = await encrypt(access_token["refresh_token"])
+            agent.x_token_expires_at = access_token["expires_at"]
+        else:
+            agent = Agent(
+                name=user.data.username,
+                readme="New account, please populate.",
+                tagline="New account, please populate",
+                model=agent_settings.default_text_gen_model,
+                x_user_id=user_id,
+                x_access_token=await encrypt(access_token["access_token"]),
+                x_refresh_token=await encrypt(access_token["refresh_token"]),
+                x_token_expires_at=int(access_token["expires_at"]),
             )
-        agent.x_access_token = await encrypt(access_token)
-        agent.x_secret_access_token = await encrypt(access_token_secret)
+            db.add(agent)
+
         await db.commit()
-        await db.refresh()
-        return {"success": True}
+        await db.refresh(agent)
     except Exception as e:
         if isinstance(e, HTTPException):
             raise
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return RedirectResponse(url=f"{settings.squad_base_url}")
+
+
+async def get_agent_x_client(db: AsyncSession, agent: Agent):
+    if not agent.x_access_token:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authenticated"
         )
 
+    if time.time() > agent.x_token_expires_at:
+        oauth = oauth_handler()
+        new_token = oauth.refresh_token(
+            client_id=settings.x_client_id,
+            refresh_token=await decrypt(agent.x_refresh_token),
+        )
+        agent.x_access_token = await encrypt(new_token["access_token"])
+        agent.x_refresh_token = await encrypt(new_token["refresh_token"])
+        agent.x_token_expires_at = new_token["expires_at"]
+        await db.commit()
+        await db.refresh(agent)
 
-async def get_agent_x_client(agent: Agent):
-    if not agent.x_access_token or not agent.x_access_token_secret:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    return tweepy.Client(
-        consumer_key=settings.x_api_key,
-        consumer_secret=settings.x_api_secret,
-        access_token=await decrypt(agent.x_access_token),
-        access_token_secret=await decrypt(agent.x_access_token_secret),
-    )
+    return tweepy.Client(await decrypt(agent.x_access_token))
 
 
 @router.post("/tweet")
@@ -124,8 +138,9 @@ async def tweet(
     in_reply_to: Optional[str] = Form(None),
     media: Optional[UploadFile] = File(None),
     agent: Agent = Depends(get_current_agent()),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    client = await get_agent_x_client(agent)
+    client = await get_agent_x_client(db, agent)
     try:
         media_ids = []
         if media:
@@ -144,8 +159,9 @@ async def tweet(
 async def follow(
     request: UserActionRequest,
     agent: Agent = Depends(get_current_agent()),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    client = await get_agent_x_client(agent)
+    client = await get_agent_x_client(db, agent)
     try:
         response = client.follow_user(request.user_id)
         return {"success": True, "following": response.data["following"]}
@@ -157,8 +173,9 @@ async def follow(
 async def like(
     request: TweetActionRequest,
     agent: Agent = Depends(get_current_agent()),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    client = await get_agent_x_client(agent)
+    client = await get_agent_x_client(db, agent)
     try:
         response = client.like(request.tweet_id)
         return {"success": True, "liked": response.data["liked"]}
@@ -170,8 +187,9 @@ async def like(
 async def retweet(
     request: TweetActionRequest,
     agent: Agent = Depends(get_current_agent()),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    client = await get_agent_x_client(agent)
+    client = await get_agent_x_client(db, agent)
     try:
         response = client.retweet(request.tweet_id)
         return {"success": True, "retweeted": response.data["retweeted"]}
@@ -183,8 +201,9 @@ async def retweet(
 async def quote_tweet(
     request: QuoteTweetRequest,
     agent: Agent = Depends(get_current_agent()),
+    db: AsyncSession = Depends(get_db_session),
 ):
-    client = await get_agent_x_client(agent)
+    client = await get_agent_x_client(db, agent)
     try:
         response = client.create_tweet(
             text=request.text,

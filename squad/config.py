@@ -51,12 +51,14 @@ class Settings(BaseSettings):
     )
     # X OAuth2 stuff.
     x_api_key: Optional[str] = os.getenv("X_API_KEY")
-    x_api_secret: Optional[str] = os.getenv("X_API_SECRET")
+    x_client_id: Optional[str] = os.getenv("X_CLIENT_ID")
+    x_client_secret: Optional[str] = os.getenv("X_CLIENT_SECRET")
     x_api_callback_url: Optional[str] = (
-        os.getenv("SQUAD_API_BASE_URL", "http://api:8000") + "/x/callback"
+        os.getenv("SQUAD_API_BASE_URL", "http://127.0.0.1:8000") + "/x/callback"
     )
 
-    # Squad API.
+    # Squad URLs.
+    squad_base_url: str = os.getenv("SQUAD_BASE_URL", "https://squad.chutes.ai")
     squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://api:8000")
 
     # Tweet storage.

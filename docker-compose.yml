@@ -10,6 +10,11 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d squad"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7
@@ -19,24 +24,11 @@ services:
     environment:
       - REDIS_PASSWORD=redispassword
     restart: always
-
-  api:
-    build:
-      context: .
-    volumes:
-      - ./squad:/app/squad
-      - ./migrations:/app/migrations
-    environment:
-      - POSTGRESQL=postgresql+asyncpg://user:password@postgres:5432/squad
-      - REDIS_URL=redis://:redispassword@redis:6379/0
-      - OPENSEARCH_URL=http://opensearch:9200
-    restart: always
-    ports:
-      - "8000:8000"
-    depends_on:
-      - postgres
-      - redis
-      - opensearch
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispassword", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   opensearch:
     environment:
@@ -59,6 +51,38 @@ services:
       - "127.0.0.1:9200:9200"
     volumes:
       - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=50s"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  api:
+    build:
+      context: .
+    volumes:
+      - ./squad:/app/squad
+      - ./migrations:/app/migrations
+    environment:
+      - POSTGRESQL=postgresql+asyncpg://user:password@postgres:5432/squad
+      - REDIS_URL=redis://:redispassword@redis:6379/0
+      - OPENSEARCH_URL=http://opensearch:9200
+      - X_API_KEY=${X_API_KEY}
+      - X_APP_ID=${X_APP_ID}
+      - X_CLIENT_ID=${X_CLIENT_ID}
+      - X_CLIENT_SECRET=${X_CLIENT_SECRET}
+      - OAUTHLIB_INSECURE_TRANSPORT="1"
+      - DEVMODE="1"
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
 
 volumes:
   postgres_data:

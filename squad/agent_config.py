@@ -3,6 +3,7 @@ Agent specific settings, only used in execution context.
 """
 
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 _AGENT_INSTANCE = None
@@ -19,7 +20,7 @@ def set_agent(agent):
 
 class Settings(BaseSettings):
     agent_id: str = os.getenv("AGENT_ID", "test_agent")
-    authorization: str = os.getenv("CHUTES_API_TOKEN")
+    authorization: Optional[str] = os.getenv("CHUTES_API_TOKEN")
     default_image_model: str = os.getenv("DEFAULT_IMAGE_MODEL", "FLUX.1-schnell")
     default_vlm_model: str = os.getenv("DEFAULT_VLM_MODEL", "OpenGVLab/InternVL2_5-78B")
     default_text_gen_model: str = os.getenv(

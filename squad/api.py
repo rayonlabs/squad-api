@@ -36,24 +36,26 @@ async def lifespan(_: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
 
     # dbmate migrations, make sure we only run them in a single process since we use workers > 1
-    worker_pid_file = "/tmp/api.pid"
-    is_migration_process = False
-    try:
-        if not os.path.exists(worker_pid_file):
-            with open(worker_pid_file, "x") as outfile:
-                outfile.write(str(os.getpid()))
-            is_migration_process = True
-        else:
+    is_migration_process = os.getenv("DEVMODE") == "1"
+    if not is_migration_process:
+        worker_pid_file = "/tmp/api.pid"
+        is_migration_process = False
+        try:
+            if not os.path.exists(worker_pid_file):
+                with open(worker_pid_file, "x") as outfile:
+                    outfile.write(str(os.getpid()))
+                is_migration_process = True
+            else:
+                with open(worker_pid_file, "r") as infile:
+                    designated_pid = int(infile.read().strip())
+                is_migration_process = os.getpid() == designated_pid
+        except FileExistsError:
             with open(worker_pid_file, "r") as infile:
                 designated_pid = int(infile.read().strip())
             is_migration_process = os.getpid() == designated_pid
-    except FileExistsError:
-        with open(worker_pid_file, "r") as infile:
-            designated_pid = int(infile.read().strip())
-        is_migration_process = os.getpid() == designated_pid
-    if not is_migration_process:
-        yield
-        return
+        if not is_migration_process:
+            yield
+            return
 
     # Initialize indices.
     await initialize_x()
@@ -61,6 +63,7 @@ async def lifespan(_: FastAPI):
 
     # Manual DB migrations.
     migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "migrations")
+    print(f"MIGRATIONS DIR: {migrations_dir}")
     if not os.path.exists(migrations_dir) or not glob.glob(os.path.join(migrations_dir, "*.sql")):
         logger.info(f"No migrations to run (yet): {migrations_dir}")
         yield

@@ -8,6 +8,7 @@ from sqlalchemy.sql import func
 from sqlalchemy import (
     Column,
     String,
+    BigInteger,
     DateTime,
 )
 from sqlalchemy.orm import validates
@@ -22,7 +23,7 @@ class Agent(Base):
     readme = Column(String, nullable=True)
     tagline = Column(String, nullable=False)
     model = Column(String, nullable=False)
-    user_id = Column(String, nullable=False)
+    user_id = Column(String, nullable=True)
 
     # System prompt overrides.
     system_prompt = Column(String, nullable=True)
@@ -30,7 +31,8 @@ class Agent(Base):
     # X auth.
     x_user_id = Column(String, nullable=True)
     x_access_token = Column(String, nullable=True)
-    x_access_token_secret = Column(String, nullable=True)
+    x_refresh_token = Column(String, nullable=True)
+    x_token_expires_at = Column(BigInteger, nullable=True)
 
     # Usernames and keywords to follow.
     x_follow_users = Column(ARRAY(String), nullable=True)
