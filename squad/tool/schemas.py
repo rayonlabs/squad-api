@@ -10,22 +10,38 @@ from sqlalchemy import (
     String,
     DateTime,
     Boolean,
+    ForeignKey,
     UniqueConstraint,
 )
 from sqlalchemy.orm import validates
+from sqlalchemy.dialects.postgresql import JSONB
 from squad.database import Base, generate_uuid
+
+
+class Tool(Base):
+    __tablename__ = "tools"
+    tool_id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    custom_tool_id = Column(String, ForeignKey("custom_tools.tool_id"), nullable=True)
+    built_in_tool_args = Column(JSONB, nullable=True)
+    public = Column(Boolean, default=False)
+    agent_id = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("agent_id", "name", name="unique_agent_tools"),)
 
 
 class CustomTool(Base):
     __tablename__ = "custom_tools"
     tool_id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)
+    description = Column(String, nullable=False)
     code = Column(String, nullable=False)
     public = Column(Boolean, default=False)
     user_id = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (UniqueConstraint("user_id", "name", name="unique_user_tools"),)
+    __table_args__ = (UniqueConstraint("user_id", "name", name="unique_custom_tools"),)
 
     @validates("code")
     def validate_code(self, _, code):

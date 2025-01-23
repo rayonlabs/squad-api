@@ -2,6 +2,7 @@
 Router for X interactions.
 """
 
+import json
 import tweepy
 from functools import lru_dict
 from typing import Optional
@@ -40,6 +41,24 @@ class QuoteTweetRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=400)
 
 
+async def _store_request_token(oauth_token: str, token_data: dict):
+    await settings.redis_client.setex(f"x:request_token:{oauth_token}", 300, json.dumps(token_data))
+
+
+async def _get_request_token(oauth_token: str):
+    token_data = await settings.redis_client.get(f"x:request_token:{oauth_token}")
+    return json.loads(token_data) if token_data else None
+
+
+@router.get("/auth")
+async def get_oauth_url():
+    oauth = oauth_handler()
+    auth_url = oauth.get_authorization_url()
+    request_token = oauth.request_token
+    await _store_request_token(request_token["oauth_token"], request_token)
+    return {"auth_url": auth_url}
+
+
 @router.get("/callback")
 async def oauth_callback(
     oauth_token: str,
@@ -47,10 +66,12 @@ async def oauth_callback(
     db: AsyncSession = Depends(get_db_session),
 ):
     oauth = oauth_handler()
-    oauth.request_token = {
-        "oauth_token": oauth_token,
-        "oauth_token_secret": oauth_verifier,
-    }
+    if (request_token := await _get_request_token(oauth_token)) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not find auth request token, try login flow again.",
+        )
+    oauth.request_token = request_token
     try:
         access_token, access_token_secret = oauth.get_access_token(oauth_verifier)
         client = tweepy.Client(
