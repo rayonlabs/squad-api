@@ -4,7 +4,7 @@ Router for X interactions.
 
 import json
 import tweepy
-from functools import lru_dict
+from functools import lru_cache
 from typing import Optional
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -19,7 +19,7 @@ from squad.agent.schemas import Agent
 router = APIRouter()
 
 
-@lru_dict(maxsize=1)
+@lru_cache(maxsize=1)
 def oauth_handler():
     return tweepy.OAuthHandler(
         settings.x_api_key,
@@ -107,7 +107,7 @@ async def oauth_callback(
         )
 
 
-def get_agent_x_client(agent: Agent):
+async def get_agent_x_client(agent: Agent):
     if not agent.x_access_token or not agent.x_access_token_secret:
         raise HTTPException(status_code=401, detail="User not authenticated")
     return tweepy.Client(

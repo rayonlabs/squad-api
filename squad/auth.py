@@ -12,3 +12,11 @@ def get_current_user():
         return None
 
     return _authenticate
+
+
+def get_current_agent():
+    # XXX TODO
+    async def _authenticate():
+        return None
+
+    return _authenticate

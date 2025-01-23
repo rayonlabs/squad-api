@@ -13,9 +13,9 @@ from fastapi.responses import ORJSONResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 import squad.database.orms  # noqa: F401
-
-# from squad.tool.router import router as tool_router
+from squad.tool.router import router as tool_router
 from squad.data.router import router as data_router
+from squad.x.router import router as x_router
 from squad.database import Base, engine
 from squad.config import settings
 
@@ -106,8 +106,9 @@ async def lifespan(_: FastAPI):
 
 # FastAPI init + routes.
 app = FastAPI(default_response_class=ORJSONResponse, lifespan=lifespan)
-# app.include_router(tool_router, prefix="/tools", tags=["Tools"])
+app.include_router(tool_router, prefix="/tools", tags=["Tools"])
 app.include_router(data_router, prefix="/data", tags=["Data"])
+app.include_router(x_router, prefix="/x", tags=["X"])
 
 # Ping endpoint for k8s probes.
 app.get("/ping")(lambda: {"message": "pong"})

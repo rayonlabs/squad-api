@@ -6,11 +6,9 @@ import re
 from fastapi import HTTPException, status
 from sqlalchemy.sql import func
 from sqlalchemy import (
-    text,
     Column,
     String,
     DateTime,
-    UniqueConstraint,
 )
 from sqlalchemy.orm import validates
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -20,7 +18,7 @@ from squad.database import Base, generate_uuid
 class Agent(Base):
     __tablename__ = "agents"
     agent_id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String(64).with_variant(String(64).collate("NOCASE"), "postgresql"))
+    name = Column(String, nullable=False)
     readme = Column(String, nullable=True)
     tagline = Column(String, nullable=False)
     model = Column(String, nullable=False)
@@ -42,10 +40,6 @@ class Agent(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint(text("LOWER(name)"), name="unique_agent_name_case_insensitive"),
-    )
 
     @validates("name")
     def validate_name(self, _, name):
