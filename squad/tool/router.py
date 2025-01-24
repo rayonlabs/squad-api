@@ -9,6 +9,7 @@ from squad.auth import get_current_user, User
 from squad.database import get_db_session
 from squad.tool.schemas import Tool
 from squad.tool.requests import ToolArgs
+from squad.tool.validation import ToolValidator
 
 router = APIRouter()
 
@@ -55,20 +56,11 @@ async def create_tool(
     db: AsyncSession = Depends(get_db_session),
     user: User = Depends(get_current_user()),
 ):
-    existing = (
-        (
-            await db.execute(
-                select(Tool).where(Tool.name.ilike(args.name), Tool.user_id == user.user_id)
-            )
-        )
-        .unique()
-        .scalar_one_or_none()
-    )
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Tool with name {args.name} already exists for your user",
-        )
+    args.args.tool_name = args.name
+    if not args.args.tool_description:
+        args.args.tool_description = args.description
+    validator = ToolValidator(db, args.args, user)
+    await validator.validate()
     tool = None
     try:
         tool = Tool(**args.model_dump())

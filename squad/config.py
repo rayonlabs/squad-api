@@ -32,6 +32,13 @@ class Settings(BaseSettings):
         else None
     )
 
+    # JWT private key for chutes auth.
+    jwt_private: bytes = (
+        b""
+        if not os.getenv("JWT_PRIVATE_PATH")
+        else open(os.getenv("JWT_PRIVATE_PATH"), "rb").read()
+    )
+
     # Clients.
     tweepy_client: Optional[AsyncClient] = (
         AsyncClient(os.getenv("X_API_TOKEN")) if os.getenv("X_API_TOKEN") else None

@@ -1,5 +1,5 @@
 """
-Router to handle storage related tools (X, brave, memories).
+Router to handle storage related tools (X search, brave search, memories CRD).
 """
 
 from pydantic import ValidationError

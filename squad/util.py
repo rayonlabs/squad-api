@@ -1,10 +1,66 @@
+import jwt
 import secrets
+import aiohttp
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 from sqlalchemy import text
 from squad.database import get_session
 from squad.config import settings
+
+
+def generate_chutes_auth_token(user, duration_minutes=30, **extra_payload):
+    """
+    Create a JWT on behalf of a user for chutes API interaction.
+    """
+    iat_timestamp = datetime.utcnow()
+    exp_timestamp = datetime.utcnow() + timedelta(minutes=duration_minutes)
+    return jwt.encode(
+        payload={
+            **{
+                "exp": exp_timestamp,
+                "iat": iat_timestamp,
+                "iss": "squad",
+                "sub": user.user_id,
+            },
+            **extra_payload,
+        },
+        key=settings.jwt_private,
+        algorithm="RS256",
+    )
+
+
+@asynccontextmanager
+async def chutes_get(path, user, **kwargs):
+    """
+    Perform GET request to chutes API as user.
+    """
+    async with aiohttp.ClientSession(
+        base_url="https://api.chutes.ai", raise_for_status=True
+    ) as session:
+        if "headers" not in kwargs:
+            kwargs["headers"] = {}
+        kwargs["headers"]["Authorization"] = f"Bearer {generate_chutes_auth_token(user)}"
+        async with session.get(path, **kwargs) as response:
+            yield response
+
+
+@asynccontextmanager
+async def chutes_post(path, user, payload, **kwargs):
+    """
+    Perform POST request to chutes API as user.
+    """
+    kwargs["json"] = payload
+    async with aiohttp.ClientSession(
+        base_url="https://api.chutes.ai", raise_for_status=True
+    ) as session:
+        if "headers" not in kwargs:
+            kwargs["headers"] = {}
+        kwargs["headers"]["Authorization"] = f"Bearer {generate_chutes_auth_token(user)}"
+        async with session.post(path, **kwargs) as response:
+            yield response
 
 
 async def encrypt(secret: str, secret_type: str = "x") -> bytes:

@@ -39,6 +39,8 @@ class Tool(Base):
           - Ensures exactly one tool class is defined
           - Verifies the tool class inherits from smolagents.Tool
         """
+        if code is None:
+            return code
         try:
             tree = ast.parse(code)
             tool_classes = [item for item in tree.body if isinstance(item, ast.ClassDef)]

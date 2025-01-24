@@ -63,10 +63,12 @@ services:
     volumes:
       - ./squad:/app/squad
       - ./migrations:/app/migrations
+      - ./squad_priv.pem:/etc/jwt-cert/squad_priv.pem
     environment:
       - POSTGRESQL=postgresql+asyncpg://user:password@postgres:5432/squad
       - REDIS_URL=redis://:redispassword@redis:6379/0
       - OPENSEARCH_URL=http://opensearch:9200
+      - JWT_PRIVATE_PATH=/etc/jwt-cert/squad_priv.pem
       - X_API_KEY=${X_API_KEY}
       - X_APP_ID=${X_APP_ID}
       - X_CLIENT_ID=${X_CLIENT_ID}

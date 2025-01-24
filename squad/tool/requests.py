@@ -1,5 +1,10 @@
+"""
+Schema for tool creation args.
+"""
+
 from typing import Optional
 from pydantic import BaseModel, Field
+import squad.tool.builtin as builtin
 
 
 class ToolArgs(BaseModel):
@@ -16,6 +21,8 @@ class ToolArgs(BaseModel):
     )
     template: Optional[str] = Field(
         None,
+        enum=[f for f in dir(builtin) if f.endswith("_tool")],
         description="Template, when using built-in dynamic tools",
     )
     public: Optional[bool] = Field(True, description="Allow others to use this tool as well")
+    args: dict = {}
