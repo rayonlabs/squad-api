@@ -56,10 +56,10 @@ async def create_tool(
     db: AsyncSession = Depends(get_db_session),
     user: User = Depends(get_current_user()),
 ):
-    args.args.tool_name = args.name
-    if not args.args.tool_description:
-        args.args.tool_description = args.description
-    validator = ToolValidator(db, args.args, user)
+    args.tool_args.tool_name = args.name
+    if not args.tool_args.tool_description:
+        args.tool_args.tool_description = args.description
+    validator = ToolValidator(db, args.tool_args, user)
     await validator.validate()
     tool = None
     try:

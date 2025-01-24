@@ -7,7 +7,9 @@ from typing import Optional
 from pydantic import BaseModel, Field, ValidationError, constr
 from fastapi import HTTPException, status
 from squad.tool.schemas import Tool
+from smolagents import Tool as STool
 import squad.util as util
+import squad.tool.builtin as builtin
 
 
 class ImageArgs(BaseModel):
@@ -97,9 +99,9 @@ class ToolValidator:
         """
         Validate image tool template args.
         """
-        await self.check_chute_exists(self.args.args.get("model"), "diffusion")
+        await self.check_chute_exists(self.args.tool_args.get("model"), "diffusion")
         try:
-            ImageArgs(**self.args.args)
+            ImageArgs(**self.args.tool_args)
         except ValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -110,9 +112,9 @@ class ToolValidator:
         """
         Validate LLM template args.
         """
-        await self.check_chute_exists(self.args.args.get("model"), "vllm")
+        await self.check_chute_exists(self.args.tool_args.get("model"), "vllm")
         try:
-            LLMArgs(**self.args.args)
+            LLMArgs(**self.args.tool_args)
         except ValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -126,7 +128,7 @@ class ToolValidator:
         Validate text-to-speech tools.
         """
         try:
-            tts_args = TTSArgs(**self.args.args)
+            tts_args = TTSArgs(**self.args.tool_args)
             exists = False
             async with util.chutes_get(
                 "/chutes/", self.user, params={"include_public": "true", "slug": tts_args.slug}
@@ -153,7 +155,7 @@ class ToolValidator:
         Validate memory tools.
         """
         try:
-            MemoryArgs(**self.args.args)
+            MemoryArgs(**self.args.tool_args)
         except ValidationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -170,4 +172,12 @@ class ToolValidator:
         """
         if not self.args.template:
             return
-        await getattr(self, f"validate_{self.args.template}")()
+        if hasattr(self, f"validate_{self.args.template}"):
+            await getattr(self, f"validate_{self.args.template}")()
+            return
+        tool = getattr(builtin, self.args.template, None)
+        if not tool or not issubclass(tool, STool):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid template: {self.args.template}",
+            )

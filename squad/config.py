@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     )
     dev_auth: Optional[str] = os.getenv("DEV_AUTH")
 
+    # Default for agent max steps.
+    default_max_steps: int = int(os.getenv("DEFAULT_MAX_STEPS", "25"))
+
     # Clients.
     tweepy_client: Optional[AsyncClient] = (
         AsyncClient(os.getenv("X_API_TOKEN")) if os.getenv("X_API_TOKEN") else None

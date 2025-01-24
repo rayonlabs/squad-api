@@ -15,6 +15,6 @@ agent_tools = Table(
     "agent_tools",
     Base.metadata,
     Column("agent_id", String, ForeignKey("agents.agent_id", ondelete="CASCADE")),
-    Column("tool_id", String, ForeignKey("tools.uuid", ondelete="CASCADE")),
+    Column("tool_id", String, ForeignKey("tools.tool_id", ondelete="CASCADE")),
     UniqueConstraint("agent_id", "tool_id", name="uq_agent_tool"),
 )

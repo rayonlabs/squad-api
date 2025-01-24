@@ -25,4 +25,4 @@ class ToolArgs(BaseModel):
         description="Template, when using built-in tools",
     )
     public: Optional[bool] = Field(True, description="Allow others to use this tool as well")
-    args: dict = {}
+    tool_args: dict = {}

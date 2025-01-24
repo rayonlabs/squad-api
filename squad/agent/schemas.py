@@ -9,13 +9,18 @@ from sqlalchemy.sql import func
 from sqlalchemy import (
     Column,
     String,
+    Integer,
     BigInteger,
     DateTime,
 )
 from sqlalchemy.orm import validates
 from sqlalchemy.dialects.postgresql import ARRAY
+from squad.config import settings
+import squad.tool.builtin as builtin
+from smolagents import Tool as STool
 from squad.database import Base, generate_uuid
 from squad.agent_tool.schemas import agent_tools
+from squad.agent.templates import DEFAULT_IMPORTS, MAIN_TEMPLATE
 
 
 class Agent(Base):
@@ -26,6 +31,7 @@ class Agent(Base):
     tagline = Column(String, nullable=False)
     model = Column(String, nullable=False)
     user_id = Column(String, nullable=True)
+    default_max_steps = Column(Integer, nullable=False, default=settings.default_max_steps)
 
     # System prompt overrides.
     sys_base_prompt = Column(String, nullable=True)
@@ -67,3 +73,70 @@ class Agent(Base):
                 detail="Invalid tagline, please describe the agent with between 3 and 1024 characters!",
             )
         return tagline
+
+    def as_executable(self, task: str, max_steps: int = None, input_modality: str = "api"):
+        """
+        Get the agent as an executable python script for a given task.
+        """
+        config_map = {
+            "sys_base_prompt": self.sys_base_prompt,
+            "sys_x_prompt": self.sys_x_prompt,
+            "sys_api_prompt": self.sys_api_prompt,
+            "sys_schedule_prompt": self.sys_schedule_prompt,
+            "agent_model": self.model,
+            "agent_callbacks": [],
+            "task": task,
+        }
+        if max_steps:
+            config_map["max_steps"] = max_steps
+        elif self.default_max_steps:
+            config_map["max_steps"] = self.default_max_steps
+        else:
+            config_map["max_steps"] = settings.default_max_steps
+        code = []
+        imports = [DEFAULT_IMPORTS.strip()]
+        tool_names = []
+        for tool in self.tools:
+            if tool.code:
+                # This is ugly but it works just fine.
+                code.append(tool.code)
+                class_match = re.search(r"^class\s*(\w+)\(Tool\)", tool.code)
+                class_name = None
+                if class_match:
+                    class_name = class_match.group(1)
+                else:
+                    for line in tool.code.splitlines():
+                        if line.startswith("class ") and "(Tool)" in line:
+                            class_name = line.split("(Tool)")[0].split(" ")[-1]
+                code.append(f"{tool.name} = {class_name}()")
+            else:
+                ref = getattr(builtin, tool.template)
+                if (
+                    input_modality not in ("X", "schedule")
+                    and tool.template.startswith("X")
+                    and tool.template != "XSearcher"
+                ):
+                    # No X actions for regular API invocations.
+                    continue
+                imports.append(f"from squad.tool.builtin import {tool.template}")
+                if tool.template == "DangerousDynamo":
+                    imports.append(
+                        "from squad.tool.builtin.dangerzone import wipe_tool_creation_step"
+                    )
+                    config_map["agent_callbacks"].append("wipe_tool_creation_step")
+                if isinstance(ref, type) and issubclass(ref, STool):
+                    code.append(f"{tool.name} = {tool.template}()")
+                else:
+                    config_map[tool.name] = tool.tool_args
+                    code.append(f"{tool.name} = {tool.template}(**__tool_args['{tool.name}'])()")
+                    tool_names.append(tool.name)
+
+        code.append(MAIN_TEMPLATE.format(tool_name_str=", ".join(tool_names)))
+        final_code = "\n".join(
+            [
+                "\n".join(imports),
+                'with open("configmap.json") as infile:\n    __tool_args = json.load(infile)',
+                "\n".join(code),
+            ]
+        )
+        return config_map, final_code
