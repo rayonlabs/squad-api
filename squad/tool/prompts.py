@@ -15,6 +15,7 @@ Here are some additional rules to follow - you must STRICTLY adhere to this guid
 - The dynamic_tool_writer function can only return these types: {AUTHORIZED_TYPES}, meaning you can ONLY set `output_type=...` to one of {AUTHORIZED_TYPES}
 - If asked to find an image or video, be sure to use a vision model to check the image before returning it, and unless specifically asked you WILL NOT generate an image to try to fake it.
 - Once you have sufficient information to adequately respond to the task, do so.
+- You are not allowed to every set filter_domains_csv in the web_search tool unless the tweet/task explicitely says something like "search for a reuters.com ..." - never try to filter the results unless required to do so
 """
 
 TOOL_WRITING_PROMPT = """You are to act as an expert tool writing assistant, who creates "Tool" classes in python.

@@ -133,7 +133,7 @@ class BaseSearchArgs(BaseModel):
         default=None, description="List of sort criteria with field and direction"
     )
     limit: Optional[int] = Field(
-        default=10, ge=1, le=100, description="Maximum number of search results to return"
+        default=7, ge=1, le=100, description="Maximum number of search results to return"
     )
 
     @model_validator(mode="after")

@@ -51,7 +51,7 @@ class XSearcher(Tool):
                     [f"{key}: {value}" for key, value in tweet.model_dump().items()]
                 )
                 response.append(tweet_str)
-                response.append(f"URL: https://x.com/i/status/{tweet.id_num}")
+                response.append(f"URL: https://x.com/i/status/{tweet.id}")
                 response.append("---")
             return "\n".join(response)
 

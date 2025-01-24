@@ -4,6 +4,7 @@ ORM definitions/methods for agents.
 
 import re
 from fastapi import HTTPException, status
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy import (
     Column,
@@ -14,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import validates
 from sqlalchemy.dialects.postgresql import ARRAY
 from squad.database import Base, generate_uuid
+from squad.agent_tool.schemas import agent_tools
 
 
 class Agent(Base):
@@ -26,7 +28,10 @@ class Agent(Base):
     user_id = Column(String, nullable=True)
 
     # System prompt overrides.
-    system_prompt = Column(String, nullable=True)
+    sys_base_prompt = Column(String, nullable=True)
+    sys_x_prompt = Column(String, nullable=True)
+    sys_api_prompt = Column(String, nullable=True)
+    sys_schedule_prompt = Column(String, nullable=True)
 
     # X auth.
     x_user_id = Column(String, nullable=True)
@@ -42,6 +47,8 @@ class Agent(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+    tools = relationship("Tool", secondary=agent_tools, back_populates="agents")
 
     @validates("name")
     def validate_name(self, _, name):

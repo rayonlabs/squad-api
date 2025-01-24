@@ -1,35 +1,13 @@
-import jwt
 import secrets
 import aiohttp
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 from sqlalchemy import text
 from squad.database import get_session
 from squad.config import settings
-
-
-def generate_chutes_auth_token(user, duration_minutes=30, **extra_payload):
-    """
-    Create a JWT on behalf of a user for chutes API interaction.
-    """
-    iat_timestamp = datetime.utcnow()
-    exp_timestamp = datetime.utcnow() + timedelta(minutes=duration_minutes)
-    return jwt.encode(
-        payload={
-            **{
-                "exp": exp_timestamp,
-                "iat": iat_timestamp,
-                "iss": "squad",
-                "sub": user.user_id,
-            },
-            **extra_payload,
-        },
-        key=settings.jwt_private,
-        algorithm="RS256",
-    )
+from squad.auth import generate_chutes_auth_token
 
 
 @asynccontextmanager

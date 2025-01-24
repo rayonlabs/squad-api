@@ -5,6 +5,7 @@ ORM definitions/methods for tools.
 import ast
 from fastapi import HTTPException, status
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from sqlalchemy import (
     Column,
     String,
@@ -15,6 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import validates
 from sqlalchemy.dialects.postgresql import JSONB
 from squad.database import Base, generate_uuid
+from squad.agent_tool.schemas import agent_tools
 
 
 class Tool(Base):
@@ -28,6 +30,8 @@ class Tool(Base):
     public = Column(Boolean, default=False)
     user_id = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    agents = relationship("Agent", secondary=agent_tools, back_populates="tools")
 
     __table_args__ = (UniqueConstraint("user_id", "name", name="unique_tools"),)
 

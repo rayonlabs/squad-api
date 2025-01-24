@@ -136,7 +136,10 @@ class WebsiteScreenshotter(Tool):
         viewport = {"width": 390, "height": 844} if mobile else {"width": 1920, "height": 1080}
         with get_browser(user_agent=user_agent, viewport=viewport) as (browser, page):
             try:
-                page.goto(url, wait_until="networkidle", timeout=10000)
+                try:
+                    page.goto(url, wait_until="networkidle", timeout=10000)
+                except TimeoutError:
+                    ...
                 screenshot = page.screenshot()
                 return Image.open(io.BytesIO(screenshot))
             except Exception as exc:
@@ -171,20 +174,24 @@ class Downloader(Tool):
 class WebSearcher(Tool):
     name = "web_search"
     description = (
-        "Tool for performing web searches to find URLs and summary information related to a topic. "
-        "The search results MUST NOT BE USED DIRECTLY to answer questions; the URLs linked MUST be visisted to find the full context for the answer."
+        "Tool for performing web searches to find URLs and summary information related to a topic."
     )
     inputs = {
-        "q": {
+        "query": {
             "type": "string",
-            "description": "search query string to use when performing the search",
+            "description": "Search query string to use when performing the search.",
+        },
+        "filter_domains_csv": {
+            "type": "string",
+            "nullable": True,
+            "description": "If (AND ONLY IF) the task given from the user/input tweet requires using specific domains, the CSV of domains to limit search results to.",
         },
         "extra_arguments": {
             "type": "object",
             "description": (
                 "Optional search flags/settings to augment, limit, or filter results. "
                 "Must be passed as a dict with key value pairs, where values are always strings. "
-                "Supported extra_argument values are the following (but do not include 'q'): "
+                "Supported extra_argument values are the following (but do not include 'query'): "
                 f"{BraveSearchParams.model_json_schema()}"
             ),
             "nullable": True,
@@ -192,8 +199,11 @@ class WebSearcher(Tool):
     }
     output_type = "string"
 
-    def forward(self, q: str, extra_arguments: dict = {}):
-        params = {"q": q}
+    def forward(self, query: str, filter_domains_csv: str = None, extra_arguments: dict = {}):
+        query = re.sub(r"site:[^ ]\s*", "", query)
+        if filter_domains_csv:
+            query += " " + " ".join([f"site:{domain}" for domain in filter_domains_csv.split(",")])
+        params = {"q": query}
         params.update(extra_arguments)
         result = requests.get(
             "https://api.search.brave.com/res/v1/web/search",
@@ -201,7 +211,10 @@ class WebSearcher(Tool):
             headers={"x-subscription-token": os.getenv("BRAVE_API_TOKEN")},
         )
         result.raise_for_status()
-        search_results = result.json()["web"]["results"]
+        raw_result = result.json()
+        if not raw_result.get("web", {}).get("results"):
+            return "No search results found."
+        search_results = raw_result["web"]["results"]
         summary_keys = [
             "title",
             "url",

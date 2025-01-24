@@ -68,7 +68,9 @@ services:
       - POSTGRESQL=postgresql+asyncpg://user:password@postgres:5432/squad
       - REDIS_URL=redis://:redispassword@redis:6379/0
       - OPENSEARCH_URL=http://opensearch:9200
-      - JWT_PRIVATE_PATH=/etc/jwt-cert/squad_priv.pem
+      ## If you have the actual JWT private cert for chutes auth.
+      #- JWT_PRIVATE_PATH=/etc/jwt-cert/squad_priv.pem
+      - DEV_CHUTES_AUTH=${CHUTES_API_KEY}
       - X_API_KEY=${X_API_KEY}
       - X_APP_ID=${X_APP_ID}
       - X_CLIENT_ID=${X_CLIENT_ID}
