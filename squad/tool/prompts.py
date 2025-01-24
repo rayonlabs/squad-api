@@ -12,12 +12,7 @@ Here are some additional rules to follow - you must STRICTLY adhere to this guid
   - As another example, you cannot assume there have been 46 presidents because for all you know, the year could be 2047.
   - ALWAYS search the web or X for any facts that could have changed if you do not know the date.
 - Always try to keep the function call arguments in the order they appear in the inputs schema, in case the function only supports position vs. keyword arguments.
-- Use tools as much as possible.
-- Simple math, random number generation, and other trivial tasks must be done inline and not make use of the dynamic_tool_writer.
-- You can only ask for one tool to be built at a time from the tool writing function.
-- The tool writer can only return these types: {AUTHORIZED_TYPES}, meaning you can ONLY set `output_type=...` to one of {AUTHORIZED_TYPES}
-- Try to write all of the tools you think you need before using them, plan wisely!
-- The only python code you can write are tool calls, everything else must be a Tool call.
+- The dynamic_tool_writer function can only return these types: {AUTHORIZED_TYPES}, meaning you can ONLY set `output_type=...` to one of {AUTHORIZED_TYPES}
 - If asked to find an image or video, be sure to use a vision model to check the image before returning it, and unless specifically asked you WILL NOT generate an image to try to fake it.
 - Once you have sufficient information to adequately respond to the task, do so.
 """

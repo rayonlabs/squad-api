@@ -1,3 +1,7 @@
+"""
+X/twitter tools.
+"""
+
 import os
 import requests
 from smolagents import Tool
@@ -8,7 +12,7 @@ from squad.agent_config import settings
 
 class XSearcher(Tool):
     name = "x_search"
-    description = "Tool for performing searches on X (formerly twitter) to find information and media related to a topic."
+    description = "Tool for performing searches on X (formerly twitter) to find information and media that might be related to a topic."
     inputs = {
         "text": {
             "type": "string",
@@ -38,13 +42,18 @@ class XSearcher(Tool):
                 "Authorization": settings.authorization,
             },
         )
-        tweets = [Tweet.from_index(item) for item in raw_response.json()]
-        response = []
-        for tweet in tweets:
-            tweet_str = "\n".join([f"{key}: {value}" for key, value in tweet.model_dump().items()])
-            response.append(tweet_str)
-            response.append("---")
-        return "\n".join(response)
+        tweets = raw_response.json()
+        if tweets:
+            response = ["Here are some tweets that may be of relevance:"]
+            tweets = [Tweet.from_index(item) for item in raw_response.json()]
+            for tweet in tweets:
+                tweet_str = "\n".join(
+                    [f"{key}: {value}" for key, value in tweet.model_dump().items()]
+                )
+                response.append(tweet_str)
+                response.append(f"URL: https://x.com/i/status/{tweet.id_num}")
+                response.append("---")
+            return "\n".join(response)
 
 
 class XTweeter(Tool):
@@ -57,7 +66,7 @@ class XTweeter(Tool):
         },
         "in_reply_to": {
             "type": "string",
-            "description": "ID of the tweet/X post this is a reply to, if it is a reply",
+            "description": "ID of the tweet/X post this is a reply to, if it is a reply, which is the 'id_num' field of the original input tweet",
             "nullable": True,
         },
         "media": {
@@ -70,6 +79,8 @@ class XTweeter(Tool):
 
     def forward(self, text: str, in_reply_to: str = None, media: str = None):
         print(f"Trying to create a tweet:\n\t{text=}\n\t{media=}")
+        if not settings.x_live_mode:
+            return "Successfully tweeted: 234234"
         form_data = {
             "text": ("", text),
         }
@@ -103,6 +114,8 @@ class XFollower(Tool):
     output_type = "string"
 
     def forward(self, user_id: str):
+        if not settings.x_live_mode:
+            return f"Successfully followed {user_id=}"
         response = requests.post(
             f"{settings.squad_api_base_url}/x/follow",
             json={"user_id": user_id},
@@ -120,12 +133,14 @@ class XLiker(Tool):
     inputs = {
         "tweet_id": {
             "type": "string",
-            "description": "ID of the tweet to like",
+            "description": "ID of the tweet to like, which is the 'id_num' value of the original input tweet",
         },
     }
     output_type = "string"
 
     def forward(self, tweet_id: str):
+        if not settings.x_live_mode:
+            return f"Successfully liked {tweet_id=}"
         response = requests.post(
             f"{settings.squad_api_base_url}/x/like",
             json={"tweet_id": tweet_id},
@@ -143,12 +158,14 @@ class XRetweeter(Tool):
     inputs = {
         "tweet_id": {
             "type": "string",
-            "description": "ID of the tweet to re-tweet",
+            "description": "ID of the tweet to re-tweet, which is the 'id_num' value of the original input tweet",
         },
     }
     output_type = "string"
 
     def forward(self, tweet_id: str):
+        if not settings.x_live_mode:
+            return f"Successfully retweeted {tweet_id=}"
         response = requests.post(
             f"{settings.squad_api_base_url}/x/retweet",
             json={"tweet_id": tweet_id},
@@ -166,7 +183,7 @@ class XQuoteTweeter(Tool):
     inputs = {
         "tweet_id": {
             "type": "string",
-            "description": "ID of the tweet to re-tweet",
+            "description": "ID of the tweet to re-tweet, which is the 'id_num' value of the original input tweet",
         },
         "text": {
             "type": "string",
@@ -176,6 +193,8 @@ class XQuoteTweeter(Tool):
     output_type = "string"
 
     def forward(self, tweet_id: str, text: str):
+        if not settings.x_live_mode:
+            return f"Successfully quote tweeted {tweet_id=}"
         response = requests.post(
             f"{settings.squad_api_base_url}/x/like",
             json={"tweet_id": tweet_id, "text": text},

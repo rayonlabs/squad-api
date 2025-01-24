@@ -2,6 +2,7 @@
 Storage/retrieval/settings/etc. for X (tweets? WTF are they called now?)
 """
 
+import asyncio
 import time
 import uuid
 import opensearchpy
@@ -306,7 +307,7 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
     )
 
     # Convert to indexable format.
-    tweets = [await tweet_to_index_format(item, api_key) for item in results]
+    tweets = await asyncio.gather(*[tweet_to_index_format(item, api_key) for item in results])
 
     # Index.
     if tweets:
@@ -360,7 +361,7 @@ async def get_and_index_tweets(ids: list[int], api_key: str) -> bool:
             ],
         )
     )
-    tweets = [await tweet_to_index_format(item, api_key) for item in results]
+    tweets = await asyncio.gather(*[tweet_to_index_format(item, api_key) for item in results])
     if tweets:
         await index_tweets(tweets)
         return True
@@ -368,17 +369,29 @@ async def get_and_index_tweets(ids: list[int], api_key: str) -> bool:
     return False
 
 
-async def find_and_index_tweets(search: str, api_key: str) -> bool:
+async def find_and_index_tweets(
+    search: str,
+    api_key: str,
+    sort_order: str = "recency",
+    exclude: list[str] = ["retweet", "reply"],
+) -> bool:
     """
     Load recent tweets by search string instead of username.
     """
-    search_id = str(uuid.uuid5(uuid.NAMESPACE_OID, search))
+    search_id = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{search}:{sort_order}:{exclude}"))
     last_attempt = await settings.redis_client.get(f"x:last_search_time:{search_id}")
     if last_attempt and (delta := time.time() - float(last_attempt)) <= 60:
         logger.warning(
             f"Most recent search for '{search}' was {int(delta)} seconds ago, skipping..."
         )
         return False
+    last_search_id = await settings.redis_client.get(f"x:last_search_id:{search_id}")
+    if last_search_id:
+        last_search_id = last_search_id.decode()
+        print(f"SEARCHING SINCE: {last_search_id}")
+    if exclude:
+        search += " " + " ".join([f"-is:{v}" for v in exclude])
+        print(f"WITH EXCLUSIONS: {search}")
     results = await settings.tweepy_client.search_recent_tweets(
         search,
         tweet_fields=["id", "text", "created_at", "public_metrics", "author_id", "attachments"],
@@ -395,9 +408,18 @@ async def find_and_index_tweets(search: str, api_key: str) -> bool:
             "variants",
             "width",
         ],
+        sort_order=sort_order,
         max_results=100,
+        since_id=last_search_id,
     )
-    results = [await tweet_to_index_format(t, api_key) for t in inject_usernames(results)]
+    results = await asyncio.gather(
+        *[tweet_to_index_format(t, api_key) for t in inject_usernames(results)]
+    )
+    if results:
+        most_recent_id = max(item["id_num"] for item in results)
+        await settings.redis_client.set(
+            f"x:last_search_id:{search_id}", str(most_recent_id), ex=24 * 60 * 60
+        )
     await index_tweets(results)
 
 

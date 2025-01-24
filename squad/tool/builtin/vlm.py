@@ -63,12 +63,20 @@ def vlm_tool(
                     if not isinstance(image, str):
                         raise ValueError("Invalid image, must be str or Image type")
                     if image.startswith(("http:", "https:")):
-                        image = Image.open(io.BytesIO(requests.get(image).content))
+                        try:
+                            image = Image.open(io.BytesIO(requests.get(image).content))
+                        except Exception:
+                            print(f"Could not fetch {image=}")
+                            image = None
                     else:
                         image = Image.open(image)
+                if not image:
+                    continue
                 buffer = io.BytesIO()
                 image.save(buffer, format="JPEG")
                 image_b64s.append(base64.b64encode(buffer.getvalue()).decode())
+            if not image_b64s:
+                return "No images to examine."
 
             call_args = {
                 **{

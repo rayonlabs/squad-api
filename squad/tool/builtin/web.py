@@ -58,7 +58,7 @@ class ContentTyper(Tool):
 class WebsiteFetcher(Tool):
     name = "visit_webpage"
     description = (
-        "Tool to fetch the content of URLs. "
+        "Tool to fetch the content of URLs (unless they are tweets, this cannot be used for twitter/x). "
         "This tool is particularly useful in extracting information from direct source material to answer questions, "
         "and must always be used subsequent to web search results unless the task is specifically to perform a web search only."
     )
