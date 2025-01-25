@@ -3,10 +3,12 @@ ORM definitions/methods for agents.
 """
 
 import re
+from async_lru import alru_cache
 from fastapi import HTTPException, status
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy import (
+    select,
     Column,
     String,
     Integer,
@@ -18,7 +20,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from squad.config import settings
 import squad.tool.builtin as builtin
 from smolagents import Tool as STool
-from squad.database import Base, generate_uuid
+from squad.database import Base, generate_uuid, get_session
 from squad.agent_tool.schemas import agent_tools
 from squad.agent.templates import DEFAULT_IMPORTS, MAIN_TEMPLATE
 
@@ -39,16 +41,16 @@ class Agent(Base):
     sys_api_prompt = Column(String, nullable=True)
     sys_schedule_prompt = Column(String, nullable=True)
 
-    # X auth.
+    # X stuff.
     x_user_id = Column(String, nullable=True)
     x_username = Column(String, nullable=True)
     x_access_token = Column(String, nullable=True)
     x_refresh_token = Column(String, nullable=True)
     x_token_expires_at = Column(BigInteger, nullable=True)
+    x_last_mentioned_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Usernames and keywords to follow.
-    x_follow_users = Column(ARRAY(String), nullable=True)
-    x_follow_keywords = Column(ARRAY(String), nullable=True)
+    # Usernames and keywords to regular search for.
+    x_searches = Column(ARRAY(String), nullable=True)
 
     # Timestamps.
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -141,3 +143,13 @@ class Agent(Base):
             ]
         )
         return config_map, final_code
+
+
+@alru_cache(maxsize=1000)
+async def get_by_x(x_username: str | int, runtime: float = 0.0):
+    """
+    Load an agent by X username.
+    """
+    query = select(Agent).where(Agent.x_username.ilike(x_username))
+    async with get_session() as session:
+        return (await session.execute(query)).unique().scalar_one_or_none()

@@ -93,37 +93,51 @@ STATIC_FIELDS = {
 }
 
 
-async def get_user(username: str) -> dict:
+async def get_users(usernames: list[str]) -> dict:
     """
-    Get a user by username from X API.
+    Get users from X API.
     """
-    if (cached := await settings.redis_client.get(f"x:user:{username}")) is not None:
-        if cached == "__none__":
-            return None
-        return json.loads(cached)
-    result = await settings.tweepy_client.get_user(
-        username=username, user_fields="public_metrics,description,created_at,protected"
-    )
-    if not result.data:
-        await settings.redis_client.set(f"x:user:{username}", "__none__", ex=10 * 60)
-        return None
-    user = {
-        "id": result.data.id,
-        "name": result.data.name,
-        "created_at": result.data.created_at,
-        "description": result.data.description,
-        "protected": result.data.protected,
-        "public_metrics": result.data.public_metrics,
-    }
-    await settings.redis_client.set(f"x:user:{username}", json.dumps(user), ex=24 * 60 * 60)
-    return user
+    user_map = {}
+    cached = await settings.redis_client.mget([f"x:user:{username}" for username in usernames])
+    to_load = []
+    for idx in range(len(cached)):
+        if cached[idx]:
+            if cached[idx].decode() == "__none__":
+                user_map[usernames[idx]] = None
+            else:
+                user_map[usernames[idx]] = json.loads(cached[idx])
+        else:
+            to_load.append(usernames[idx])
+    if to_load:
+        results = await settings.tweepy_client.get_users(
+            usernames=list(set(to_load)),
+            user_fields="public_metrics,description,created_at,protected",
+        )
+        if results.data:
+            for user in results.data:
+                user_map[user.username] = {
+                    "id": user.id,
+                    "name": user.name,
+                    "created_at": user.data["created_at"],
+                    "description": user.data["description"],
+                    "protected": user.data["protected"],
+                    "public_metrics": user.data["public_metrics"],
+                }
+                await settings.redis_client.set(
+                    f"x:user:{user.username}", json.dumps(user_map[user.username]), ex=24 * 60 * 60
+                )
+        for username in to_load:
+            if username not in user_map:
+                await settings.redis_client.set(f"x:user:{username}", "__none__", ex=10 * 60)
+                user_map[username] = None
+    return user_map
 
 
 async def username_to_user_id(username: str) -> int:
     """
     Twitter needs to search based on user IDs (integer), so we need to get that mapping.
     """
-    if (user := await get_user(username)) is not None:
+    if (user := (await get_users([username])).get(username)) is not None:
         return int(user["id"])
     return None
 
@@ -167,7 +181,7 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
         if not tweet["text"] or not tweet["text"].strip()
         else detect_language(tweet["text"])
     )
-    user = await get_user(tweet["username"])
+    user = (await get_users([tweet["username"]])).get(tweet["username"])
     doc = {
         "id_num": tweet["id"],
         "user_id_term": tweet["author_id"],
@@ -186,9 +200,10 @@ async def tweet_to_index_format(tweet: dict, api_key: str) -> dict:
         doc[f"tweet_text_{language}"] = tweet["text"]
 
     # Boolean flags for attachment types.
-    for attachment in doc.get("attachments") or []:
-        doc[f"has_{attachment['type']}_bool"] = True
-    if doc.get("attachments"):
+    attachments = doc.get("attachments")
+    if isinstance(attachments, list):
+        for attachment in attachments:
+            doc[f"has_{attachment['type']}_bool"] = True
         doc["has_attachment_bool"] = True
 
     # Calculate embeddings.
@@ -261,13 +276,13 @@ async def most_recent_user_tweet(user_id: int) -> list[dict]:
     return documents[0]["_id"]
 
 
-async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
+async def find_and_index_user_tweets(username: str, api_key: str) -> int:
     """
     Load recent tweets for a given username.
     """
     if (user_id := await username_to_user_id(username)) is None:
         logger.warning(f"Could not find a user_id associated with {username=}")
-        return False
+        return 0
 
     # Make sure we aren't spamming.
     last_attempt = await settings.redis_client.get(f"x:last_user_update:{user_id}")
@@ -275,7 +290,7 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
         logger.warning(
             f"Username {username} was last checked {int(delta)} seconds ago, skipping..."
         )
-        return False
+        return 0
 
     # Get the most recent tweet date, to avoid duplicate search work.
     try:
@@ -313,10 +328,10 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> bool:
     if tweets:
         await index_tweets(tweets)
         await settings.redis_client.set(f"x:last_user_update:{user_id}", str(time.time()))
-        return True
+        return len(tweets)
 
     logger.warning(f"No new tweets/replies/reposts found: {username=} since {most_recent_id=}")
-    return False
+    return 0
 
 
 async def get_and_index_tweets(ids: list[int], api_key: str) -> bool:
@@ -374,7 +389,7 @@ async def find_and_index_tweets(
     api_key: str,
     sort_order: str = "recency",
     exclude: list[str] = ["retweet", "reply"],
-) -> bool:
+) -> int:
     """
     Load recent tweets by search string instead of username.
     """
@@ -384,14 +399,12 @@ async def find_and_index_tweets(
         logger.warning(
             f"Most recent search for '{search}' was {int(delta)} seconds ago, skipping..."
         )
-        return False
+        return 0
     last_search_id = await settings.redis_client.get(f"x:last_search_id:{search_id}")
     if last_search_id:
         last_search_id = last_search_id.decode()
-        print(f"SEARCHING SINCE: {last_search_id}")
     if exclude:
         search += " " + " ".join([f"-is:{v}" for v in exclude])
-        print(f"WITH EXCLUSIONS: {search}")
     results = await settings.tweepy_client.search_recent_tweets(
         search,
         tweet_fields=["id", "text", "created_at", "public_metrics", "author_id", "attachments"],
@@ -412,15 +425,18 @@ async def find_and_index_tweets(
         max_results=100,
         since_id=last_search_id,
     )
-    results = await asyncio.gather(
-        *[tweet_to_index_format(t, api_key) for t in inject_usernames(results)]
-    )
+    with_usernames = inject_usernames(results)
+    all_usernames = set([doc["username"] for doc in with_usernames])
+    if all_usernames:
+        await get_users(list(all_usernames))
+    results = await asyncio.gather(*[tweet_to_index_format(t, api_key) for t in with_usernames])
     if results:
         most_recent_id = max(item["id_num"] for item in results)
         await settings.redis_client.set(
             f"x:last_search_id:{search_id}", str(most_recent_id), ex=24 * 60 * 60
         )
     await index_tweets(results)
+    return len(results)
 
 
 async def search(

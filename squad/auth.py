@@ -15,7 +15,7 @@ from squad.config import settings
 from squad.agent.schemas import Agent
 
 
-def generate_auth_token(user, duration_minutes=30, **extra_payload):
+def generate_auth_token(user_id, duration_minutes=30, **extra_payload):
     """
     Create a JWT on behalf of a user for chutes API interaction.
     """
@@ -29,7 +29,7 @@ def generate_auth_token(user, duration_minutes=30, **extra_payload):
                 "exp": exp_timestamp,
                 "iat": iat_timestamp,
                 "iss": "squad",
-                "sub": user.user_id,
+                "sub": user_id,
             },
             **extra_payload,
         },

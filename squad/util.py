@@ -1,5 +1,8 @@
+import uuid
+import time
 import secrets
 import aiohttp
+from loguru import logger
 from contextlib import asynccontextmanager
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
@@ -20,7 +23,7 @@ async def chutes_get(path, user, **kwargs):
     ) as session:
         if "headers" not in kwargs:
             kwargs["headers"] = {}
-        kwargs["headers"]["Authorization"] = f"Bearer {generate_auth_token(user)}"
+        kwargs["headers"]["Authorization"] = f"Bearer {generate_auth_token(user.user_id)}"
         async with session.get(path, **kwargs) as response:
             yield response
 
@@ -36,7 +39,7 @@ async def chutes_post(path, user, payload, **kwargs):
     ) as session:
         if "headers" not in kwargs:
             kwargs["headers"] = {}
-        kwargs["headers"]["Authorization"] = f"Bearer {generate_auth_token(user)}"
+        kwargs["headers"]["Authorization"] = f"Bearer {generate_auth_token(user.user_id)}"
         async with session.post(path, **kwargs) as response:
             yield response
 
@@ -90,11 +93,21 @@ async def decrypt(encrypted_secret: str, secret_type: str = "x") -> str:
     return unpadded_data.decode("utf-8")
 
 
-async def main():
-    print(await decrypt(await encrypt("testing")))
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main())
+async def rate_limit(rate_key, limit, window, incr_by: int = 1) -> bool:
+    """
+    Arbitrary keyed rate limits.
+    """
+    cache_key = "squad:rate:" + str(uuid.uuid5(uuid.NAMESPACE_OID, rate_key))
+    now = time.time()
+    async with settings.redis_client.pipeline() as pipe:
+        await pipe.zremrangebyscore(cache_key, 0, now - window)
+        await pipe.zcard(cache_key)
+        # Add incr_by timestamps spread over a tiny interval to avoid collisions
+        for i in range(incr_by):
+            await pipe.zadd(cache_key, {str(now + i / 1000): now + i / 1000})
+        await pipe.expire(cache_key, window)
+        _, count, *_ = await pipe.execute()
+    if count >= limit:
+        logger.warning(f"Rate limiting: {rate_key}: {count=} per {window} seconds")
+        return True
+    return False
