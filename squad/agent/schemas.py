@@ -41,6 +41,7 @@ class Agent(Base):
 
     # X auth.
     x_user_id = Column(String, nullable=True)
+    x_username = Column(String, nullable=True)
     x_access_token = Column(String, nullable=True)
     x_refresh_token = Column(String, nullable=True)
     x_token_expires_at = Column(BigInteger, nullable=True)
