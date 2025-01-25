@@ -2,9 +2,10 @@
 Router to handle storage related tools (X search, brave search, memories CRD).
 """
 
+from typing import Any
 from pydantic import ValidationError
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from squad.auth import User, get_current_user
+from squad.auth import get_current_user
 from squad.config import settings
 from squad.data.schemas import (
     BraveSearchParams,
@@ -24,7 +25,7 @@ router = APIRouter()
 @router.post("/brave/search")
 async def perform_brave_search(
     search: BraveSearchParams,
-    current_user: User = Depends(get_current_user()),
+    current_user: Any = Depends(get_current_user()),
 ):
     params = search.dict()
     async with settings.brave_sm.get_session() as session:
@@ -36,7 +37,7 @@ async def perform_brave_search(
 async def perform_x_search(
     search: XSearchParams,
     authorization: str = Header(None, alias="Authorization"),
-    current_user: User = Depends(get_current_user()),
+    current_user: Any = Depends(get_current_user()),
 ):
     params = search.dict()
     params["api_key"] = authorization
@@ -49,7 +50,7 @@ async def perform_memory_search(
     search: MemorySearchParams,
     agent_id: str = Header(None, alias="X-Agent-ID"),
     authorization: str = Header(None, alias="Authorization"),
-    current_user: User = Depends(get_current_user()),
+    current_user: Any = Depends(get_current_user()),
 ):
     params = search.dict()
     params["agent_id"] = agent_id
@@ -63,7 +64,7 @@ async def create_memory(
     memory_args: MemoryArgs,
     agent_id: str = Header(None, alias="X-Agent-ID"),
     authorization: str = Header(None, alias="Authorization"),
-    current_user: User = Depends(get_current_user()),
+    current_user: Any = Depends(get_current_user()),
 ):
     try:
         memory = Memory(agent_id=agent_id, **memory_args.model_dump())
@@ -80,6 +81,6 @@ async def create_memory(
 async def del_memory(
     memory_id: str,
     agent_id: str = Header(None, alias="X-Agent-ID"),
-    _: User = Depends(get_current_user()),
+    _: Any = Depends(get_current_user()),
 ):
     return await delete_memory(agent_id, memory_id)

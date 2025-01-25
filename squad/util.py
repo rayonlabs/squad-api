@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives import padding
 from sqlalchemy import text
 from squad.database import get_session
 from squad.config import settings
-from squad.auth import generate_chutes_auth_token
+from squad.auth import generate_auth_token
 
 
 @asynccontextmanager
@@ -20,7 +20,7 @@ async def chutes_get(path, user, **kwargs):
     ) as session:
         if "headers" not in kwargs:
             kwargs["headers"] = {}
-        kwargs["headers"]["Authorization"] = f"Bearer {generate_chutes_auth_token(user)}"
+        kwargs["headers"]["Authorization"] = f"Bearer {generate_auth_token(user)}"
         async with session.get(path, **kwargs) as response:
             yield response
 
@@ -36,7 +36,7 @@ async def chutes_post(path, user, payload, **kwargs):
     ) as session:
         if "headers" not in kwargs:
             kwargs["headers"] = {}
-        kwargs["headers"]["Authorization"] = f"Bearer {generate_chutes_auth_token(user)}"
+        kwargs["headers"]["Authorization"] = f"Bearer {generate_auth_token(user)}"
         async with session.post(path, **kwargs) as response:
             yield response
 

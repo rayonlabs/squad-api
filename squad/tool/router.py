@@ -2,10 +2,11 @@
 Router to handle tools.
 """
 
+from typing import Optional, Any
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status
-from squad.auth import get_current_user, User
+from squad.auth import get_current_user
 from squad.database import get_db_session
 from squad.tool.schemas import Tool
 from squad.tool.requests import ToolArgs
@@ -15,32 +16,41 @@ router = APIRouter()
 
 
 async def _load_tool(db, tool_id, user_id):
-    return (
-        (
-            await db.execute(
-                select(Tool).where(
-                    Tool.tool_id == tool_id, or_(Tool.public.is_(True), Tool.user_id == user_id)
-                )
-            )
-        )
-        .unique()
-        .scalar_one_or_none()
-    )
+    query = select(Tool).where(Tool.tool_id == tool_id)
+    if user_id:
+        query = query.where(or_(Tool.user_id == user_id, Tool.public.is_(True)))
+    else:
+        query = query.where(Tool.public.is_(True))
+    return (await db.execute(query)).unique().scalar_one_or_none()
 
 
 @router.get("")
 async def list_tools(
     db: AsyncSession = Depends(get_db_session),
-    user: User = Depends(get_current_user()),
+    include_public: Optional[bool] = False,
+    user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
-    return []
+    query = select(Tool)
+    if include_public:
+        if user:
+            query = query.where(or_(Tool.user_id == user.user_id, Tool.public.is_(True)))
+        else:
+            query = query.where(Tool.public.is_(True))
+    elif not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You must authenticate to see your own private tools.",
+        )
+    else:
+        query = query.where(Tool.user_id == user.user_id)
+    return (await db.execute(query)).unique().scalars().all()
 
 
 @router.get("/{tool_id}")
 async def get_tool(
     tool_id: str,
     db: AsyncSession = Depends(get_db_session),
-    user: User = Depends(get_current_user()),
+    user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
     if (tool := await _load_tool(db, tool_id, user.user_id)) is None:
         raise HTTPException(
@@ -54,7 +64,7 @@ async def get_tool(
 async def create_tool(
     args: ToolArgs,
     db: AsyncSession = Depends(get_db_session),
-    user: User = Depends(get_current_user()),
+    user: Any = Depends(get_current_user()),
 ):
     args.tool_args.tool_name = args.name
     if not args.tool_args.tool_description:
@@ -80,12 +90,13 @@ async def create_tool(
 async def delete_tool(
     tool_id: str,
     db: AsyncSession = Depends(get_db_session),
-    user: User = Depends(get_current_user()),
+    user: Any = Depends(get_current_user()),
 ):
-    if (tool := await _load_tool(db, tool_id, user.user_id)) is None:
+    tool = await _load_tool(db, tool_id, user.user_id)
+    if not tool or tool.user_id != user.user_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tool {tool_id} not found, or is not public",
+            detail=f"Tool {tool_id} not found, or does not belong to you.",
         )
     return tool
     await db.delete(tool)
