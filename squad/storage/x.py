@@ -133,6 +133,47 @@ async def get_users(usernames: list[str]) -> dict:
     return user_map
 
 
+async def get_users_by_id(ids: list[str]) -> dict:
+    """
+    Get users from X API by author_id ints.
+    """
+    user_map = {}
+    cached = await settings.redis_client.mget([f"x:user:{_id}" for _id in ids])
+    to_load = []
+    for idx in range(len(cached)):
+        if cached[idx]:
+            if cached[idx].decode() == "__none__":
+                user_map[ids[idx]] = None
+            else:
+                user_map[ids[idx]] = json.loads(cached[idx])
+        else:
+            to_load.append(ids[idx])
+    if to_load:
+        results = await settings.tweepy_client.get_users(
+            ids=list(set(to_load)),
+            user_fields="public_metrics,description,created_at,protected",
+        )
+        if results.data:
+            for user in results.data:
+                user_map[user.id] = {
+                    "id": user.id,
+                    "username": user.username,
+                    "name": user.name,
+                    "created_at": user.data["created_at"],
+                    "description": user.data["description"],
+                    "protected": user.data["protected"],
+                    "public_metrics": user.data["public_metrics"],
+                }
+                await settings.redis_client.set(
+                    f"x:user_by_id:{user.id}", json.dumps(user_map[user.id]), ex=7 * 24 * 60 * 60
+                )
+        for _id in to_load:
+            if _id not in user_map:
+                await settings.redis_client.set(f"x:user:{_id}", "__none__", ex=10 * 60)
+                user_map[_id] = None
+    return user_map
+
+
 async def username_to_user_id(username: str) -> int:
     """
     Twitter needs to search based on user IDs (integer), so we need to get that mapping.

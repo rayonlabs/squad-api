@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # Default for agent max steps.
     default_max_steps: int = int(os.getenv("DEFAULT_MAX_STEPS", "25"))
 
+    # Default user ID for calling chutes, e.g. for X stream index embeddings.
+    default_user_id: str = os.getenv("DEFAULT_CHUTES_USER", "dff3e6bb-3a6b-5a2b-9c48-da3abcd5ca5f")
+
     # Clients.
     tweepy_client: Optional[AsyncClient] = (
         AsyncClient(os.getenv("X_API_TOKEN")) if os.getenv("X_API_TOKEN") else None
