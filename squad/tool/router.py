@@ -28,9 +28,12 @@ async def _load_tool(db, tool_id, user_id):
 async def list_tools(
     db: AsyncSession = Depends(get_db_session),
     include_public: Optional[bool] = False,
+    search: Optional[str] = None,
     user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
     query = select(Tool)
+    if search:
+        query = query.where(Tool.name.ilike(f"%{search}%"))
     if include_public:
         if user:
             query = query.where(or_(Tool.user_id == user.user_id, Tool.public.is_(True)))
@@ -98,7 +101,6 @@ async def delete_tool(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tool {tool_id} not found, or does not belong to you.",
         )
-    return tool
     await db.delete(tool)
     await db.commit()
     return {"deleted": True, "tool_id": tool_id}

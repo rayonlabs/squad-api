@@ -3,7 +3,7 @@ import time
 import squad.database.orms  # noqa
 from loguru import logger
 from tweepy import StreamRule
-from typing import List, Set, Dict, Any
+from typing import Set
 from sqlalchemy import select, func
 from tweepy.asynchronous import AsyncStreamingClient
 from tweepy.errors import TweepyException
@@ -97,14 +97,22 @@ class XR:
         Listen for stream events.
         """
 
-        async def on_tweet(tweet: Dict[str, Any]):
-            mentioned_users = tweet.get("entities", {}).get("mentions", [])
-            await self._process_mentions(
-                tweet_id=tweet["id"],
-                author_id=tweet.get("author_id"),
-                mentions=[m["username"] for m in mentioned_users],
-                text=tweet["text"],
-            )
+        async def on_tweet(tweet_obj):
+            tweet = tweet_obj.data
+            mentions = tweet.get("entities", {}).get("mentions", [])
+            for mention in mentions:
+                username = mention.get("username") if isinstance(mention, dict) else mention
+                if not username:
+                    continue
+                agent = await get_by_x(username, runtime=self._runtime)
+                if not agent:
+                    logger.debug(f"No agent found with {username=}")
+                else:
+                    logger.info(f"Received tweet: {tweet['id']=} {tweet['author_id']=} {username=}")
+                    if await rate_limit(f"agent_x_call:{agent.agent_id}", 10, 60):
+                        logger.warning(f"Rate limit exceeded for {agent.agent_id=} {username=}")
+                        continue
+                    logger.error(f"TODO: X trigger for {agent.agent_id=} {username=}")
 
         async def on_error(error):
             logger.error(f"X stream error: {error}")
@@ -114,21 +122,14 @@ class XR:
 
         self.stream.on_tweet = on_tweet
         self.stream.on_error = on_error
-        await self.stream.filter(tweet_fields=["author_id", "entities"])
-
-    async def _process_mentions(
-        self, tweet_id: str, author_id: str, mentions: List[str], text: str
-    ):
-        for username in mentions:
-            agent = await get_by_x(username, runtime=self._runtime)
-            if not agent:
-                logger.debug(f"Skipping tweet mentioning: {username}")
-            else:
-                logger.info(f"Received tweet: {tweet_id=} {author_id=} {mentions=}")
-                if await rate_limit(f"agent_x_call:{agent.agent_id}", 10, 60):
-                    logger.warning(f"Rate limit exceeded for {agent.agent_id=} {username=}")
-                    continue
-                logger.error(f"TODO: X trigger for {agent.agent_id=} {username=}")
+        await self.stream.filter(
+            tweet_fields=[
+                "author_id",
+                "entities",
+                "public_metrics",
+                "attachments",
+            ]
+        )
 
 
 async def main():

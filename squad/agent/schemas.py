@@ -12,6 +12,7 @@ from sqlalchemy import (
     Column,
     String,
     Integer,
+    Boolean,
     BigInteger,
     DateTime,
 )
@@ -34,6 +35,8 @@ class Agent(Base):
     model = Column(String, nullable=False)
     user_id = Column(String, nullable=True)
     default_max_steps = Column(Integer, nullable=False, default=settings.default_max_steps)
+    public = Column(Boolean, default=True)
+    include_trace = Column(Boolean, default=True)
 
     # System prompt overrides.
     sys_base_prompt = Column(String, nullable=True)
