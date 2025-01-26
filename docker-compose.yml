@@ -79,13 +79,16 @@ services:
       - ./squad:/app/squad
       - ./migrations:/app/migrations
       - ./squad_priv.pem:/etc/jwt-cert/squad_priv.pem
+      - ./squad_pub.pem:/etc/jwt-cert/squad_pub.pem
     environment:
       - POSTGRESQL=postgresql+asyncpg://user:password@postgres:5432/squad
       - REDIS_URL=redis://:redispassword@redis:6379/0
       - OPENSEARCH_URL=http://opensearch:9200
       ## If you have the actual JWT private cert for chutes auth.
-      #- JWT_PRIVATE_PATH=/etc/jwt-cert/squad_priv.pem
-      - DEV_CHUTES_AUTH=${CHUTES_API_KEY}
+      - JWT_PRIVATE_PATH=/etc/jwt-cert/squad_priv.pem
+      - JWT_PUBLIC_PATH=/etc/jwt-cert/squad_pub.pem
+      # Otherwise hack away with manual key.
+      #- DEV_CHUTES_AUTH=${CHUTES_API_KEY}
       - X_API_TOKEN=${X_API_TOKEN}
       - X_API_KEY=${X_API_KEY}
       - X_APP_ID=${X_APP_ID}

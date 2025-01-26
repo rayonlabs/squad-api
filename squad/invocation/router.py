@@ -3,6 +3,7 @@ Router to handle invocations (except the actual creation/POST call).
 """
 
 import io
+import orjson as json
 import asyncio
 import traceback
 from pathlib import Path
@@ -22,6 +23,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from squad.auth import get_current_user, get_current_agent
+from squad.util import now_str
 from squad.config import settings
 from squad.database import get_db_session
 from squad.pagination import PaginatedResponse
@@ -196,6 +198,30 @@ async def delete_invocation(
     return {"deleted": True, "invocation_id": invocation_id}
 
 
+@router.post("/{invocation_id}/log")
+async def append_log(
+    invocation_id: str,
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await get_current_agent(issuer="squad-agent", scopes=[invocation_id])(request, authorization)
+    invocation = await _load_invocation(db, invocation_id, "__agent__")
+    if invocation.completed_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invocation {invocation_id} has already been marked as completed.",
+        )
+    log = (await request.json()).get("log")
+    if log and isinstance(log, str):
+        await settings.redis_client.xadd(
+            invocation.stream_key,
+            {"data": json.dumps({"log": log, "timestamp": now_str()}).decode()},
+        )
+
+    return "ack"
+
+
 @router.post("/{invocation_id}/upload")
 async def upload_file(
     invocation_id: str,
@@ -248,4 +274,12 @@ async def mark_complete(
     invocation.answer = await request.json()
     await db.commit()
     await db.refresh(invocation)
+    await settings.redis_client.xadd(
+        invocation.stream_key,
+        {
+            "data": json.dumps(
+                {"log": "Invocation is now complete.", "timestamp": now_str()}
+            ).decode()
+        },
+    )
     return invocation

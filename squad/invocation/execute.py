@@ -63,9 +63,10 @@ async def prepare_execution_environment(invocation_id: str):
     if invocation.source in ["x", "schedule"]:
         scopes.append("x")
     token = generate_auth_token(
-        invocation.user_id,
+        invocation.agent_id,
+        issuer="squad-agent",
         duration_minutes=60,
-        scopes=[scopes],
+        scopes=scopes,
     )
 
     # Configure the task, based on the input type.

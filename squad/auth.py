@@ -14,7 +14,7 @@ from squad.config import settings
 from squad.agent.schemas import Agent
 
 
-def generate_auth_token(user_id, duration_minutes=30, **extra_payload):
+def generate_auth_token(user_id, duration_minutes=30, issuer: str = "squad", **extra_payload):
     """
     Create a JWT on behalf of a user for chutes API interaction.
     """
@@ -27,7 +27,7 @@ def generate_auth_token(user_id, duration_minutes=30, **extra_payload):
             **{
                 "exp": exp_timestamp,
                 "iat": iat_timestamp,
-                "iss": "squad",
+                "iss": issuer,
                 "sub": user_id,
             },
             **extra_payload,
@@ -90,7 +90,7 @@ def get_current_agent(issuer: str = "squad-agent", scopes: list[str] = None):
         try:
             payload = jwt.decode(
                 token,
-                settings.squad_cert,
+                settings.jwt_public,
                 algorithms=["RS256"],
                 options={
                     "verify_signature": True,
@@ -109,8 +109,10 @@ def get_current_agent(issuer: str = "squad-agent", scopes: list[str] = None):
                     )
             async with get_session() as session:
                 agent = (
-                    await session.execute(select(Agent).where(Agent.agent_id == agent_id))
-                ).scalar_one_or_none()
+                    (await session.execute(select(Agent).where(Agent.agent_id == agent_id)))
+                    .unique()
+                    .scalar_one_or_none()
+                )
                 if agent:
                     return agent
         except jwt.InvalidTokenError:
