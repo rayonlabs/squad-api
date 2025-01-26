@@ -3,12 +3,14 @@ Settings used in creating OpenSearch indices for agent memory, tweet index, etc.
 """
 
 import os
-import aiohttp
 import backoff
 from loguru import logger
 from copy import deepcopy
 from langdetect import detect
+from squad.aiosession import SessionManager
 
+# Session manager for embeddings.
+EMBED_SM = SessionManager(base_url="https://chutes-baai-bge-m3.chutes.ai")
 
 # Default shard/replica counts.
 DEFAULT_SHARD_COUNT = int(os.getenv("SHARD_COUNT", "1"))
@@ -196,7 +198,7 @@ def detect_language(text: str) -> str:
     try:
         return LANGDETECT_TO_OPENSEARCH.get(detect(text), "english")
     except Exception as exc:
-        logger.error(f"Error performing language detection: {exc}")
+        logger.warning(f"Error performing language detection: {exc}")
     return "english"
 
 
@@ -211,9 +213,9 @@ async def generate_embeddings(text: str, api_key: str) -> list[float]:
     """
     Generate embeddings with bge-m3 (multi-lingual) for a given input text.
     """
-    async with aiohttp.ClientSession(raise_for_status=True) as session:
+    async with EMBED_SM.get_session() as session:
         async with session.post(
-            "https://chutes-baai-bge-m3.chutes.ai/embed",
+            "/embed",
             json={
                 "inputs": text,
             },

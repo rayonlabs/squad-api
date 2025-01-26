@@ -17,7 +17,7 @@ from squad.storage.x import index_tweets, tweet_to_index_format, get_users_by_id
 
 # Static rules.
 STATIC_RULES = {
-    "($btc OR #bittensor OR $tao) -$fet -$FET -$eth -$ETH -$fart -$FART -$xrp -$XRP -$sol -$SOL -$trx -$TRX -$pepe -$PEPE -$aapl -$AAPL -$trump -$TRUMP -🔴LIVE -airdrop -#solana -#SOLANA -AIRDROP -Airdrop -$BTCAI -$btcai -is:retweet -is:reply",
+    "($btc OR #bittensor OR $tao OR @rayon_labs OR @namoray_dev OR @jon_durbin OR @const_reborn OR @opentensor) -$fet -$FET -$eth -$ETH -$fart -$FART -$xrp -$XRP -$sol -$SOL -$trx -$TRX -$pepe -$PEPE -$aapl -$AAPL -$trump -$TRUMP -🔴LIVE -airdrop -#solana -#SOLANA -AIRDROP -Airdrop -$BTCAI -$btcai -is:retweet -is:reply",
 }
 
 

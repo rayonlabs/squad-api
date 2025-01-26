@@ -63,6 +63,10 @@ class Settings(BaseSettings):
         if os.getenv("BRAVE_API_TOKEN")
         else None
     )
+    chutes_sm: SessionManager = SessionManager(
+        base_url=os.getenv("CHUTES_API_URL", "https://api.chutes.ai"),
+    )
+
     # X OAuth2 stuff.
     x_api_key: Optional[str] = os.getenv("X_API_KEY")
     x_client_id: Optional[str] = os.getenv("X_CLIENT_ID")

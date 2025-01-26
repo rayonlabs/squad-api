@@ -80,7 +80,7 @@ class Agent(Base):
             )
         return tagline
 
-    def as_executable(self, task: str, max_steps: int = None, input_modality: str = "api"):
+    def as_executable(self, task: str, max_steps: int = None, source: str = "api"):
         """
         Get the agent as an executable python script for a given task.
         """
@@ -118,7 +118,7 @@ class Agent(Base):
             else:
                 ref = getattr(builtin, tool.template)
                 if (
-                    input_modality not in ("X", "schedule")
+                    source not in ("X", "schedule")
                     and tool.template.startswith("X")
                     and tool.template != "XSearcher"
                 ):

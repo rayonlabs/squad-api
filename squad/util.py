@@ -1,7 +1,6 @@
 import uuid
 import time
 import secrets
-import aiohttp
 from loguru import logger
 from contextlib import asynccontextmanager
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -18,9 +17,7 @@ async def chutes_get(path, user, **kwargs):
     """
     Perform GET request to chutes API as user.
     """
-    async with aiohttp.ClientSession(
-        base_url="https://api.chutes.ai", raise_for_status=True
-    ) as session:
+    async with settings.chutes_sm.get_session() as session:
         if "headers" not in kwargs:
             kwargs["headers"] = {}
         kwargs["headers"]["Authorization"] = f"Bearer {generate_auth_token(user.user_id)}"
@@ -34,9 +31,7 @@ async def chutes_post(path, user, payload, **kwargs):
     Perform POST request to chutes API as user.
     """
     kwargs["json"] = payload
-    async with aiohttp.ClientSession(
-        base_url="https://api.chutes.ai", raise_for_status=True
-    ) as session:
+    async with settings.chutes_sm.get_session() as session:
         if "headers" not in kwargs:
             kwargs["headers"] = {}
         kwargs["headers"]["Authorization"] = f"Bearer {generate_auth_token(user.user_id)}"

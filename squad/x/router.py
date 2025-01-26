@@ -137,7 +137,7 @@ async def tweet(
     text: str = Form(...),
     in_reply_to: Optional[str] = Form(None),
     media: Optional[UploadFile] = File(None),
-    agent: Agent = Depends(get_current_agent()),
+    agent: Agent = Depends(get_current_agent(scopes=["x"])),
     db: AsyncSession = Depends(get_db_session),
 ):
     client = await get_agent_x_client(db, agent)
@@ -158,7 +158,7 @@ async def tweet(
 @router.post("/follow")
 async def follow(
     request: UserActionRequest,
-    agent: Agent = Depends(get_current_agent()),
+    agent: Agent = Depends(get_current_agent(scopes=["x"])),
     db: AsyncSession = Depends(get_db_session),
 ):
     client = await get_agent_x_client(db, agent)
@@ -172,7 +172,7 @@ async def follow(
 @router.post("/like")
 async def like(
     request: TweetActionRequest,
-    agent: Agent = Depends(get_current_agent()),
+    agent: Agent = Depends(get_current_agent(scopes=["x"])),
     db: AsyncSession = Depends(get_db_session),
 ):
     client = await get_agent_x_client(db, agent)
@@ -186,7 +186,7 @@ async def like(
 @router.post("/retweet")
 async def retweet(
     request: TweetActionRequest,
-    agent: Agent = Depends(get_current_agent()),
+    agent: Agent = Depends(get_current_agent(scopes=["x"])),
     db: AsyncSession = Depends(get_db_session),
 ):
     client = await get_agent_x_client(db, agent)
@@ -200,7 +200,7 @@ async def retweet(
 @router.post("/quote")
 async def quote_tweet(
     request: QuoteTweetRequest,
-    agent: Agent = Depends(get_current_agent()),
+    agent: Agent = Depends(get_current_agent(scopes=["x"])),
     db: AsyncSession = Depends(get_db_session),
 ):
     client = await get_agent_x_client(db, agent)

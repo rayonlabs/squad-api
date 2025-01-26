@@ -5,7 +5,6 @@ Authentication stuff.
 import jwt
 import json
 import uuid
-import aiohttp
 from sqlalchemy import select
 from types import SimpleNamespace
 from fastapi import Request, HTTPException, status, Header
@@ -46,14 +45,12 @@ async def load_chute_user(authorization: str):
     cached = await settings.redis_client.get(cache_key)
     if cached:
         return SimpleNamespace(**json.loads(cached.decode()))
-    async with aiohttp.ClientSession(
-        base_url="https://api.chutes.ai",
-        raise_for_status=True,
-        headers={
+
+    async with settings.chutes_sm.get_session() as session:
+        headers = {
             "Authorization": authorization,
-        },
-    ) as session:
-        async with session.get("/users/me", timeout=5.0) as response:
+        }
+        async with session.get("/users/me", headers=headers, timeout=5.0) as response:
             user_data = await response.json()
             await settings.redis_client.set(cache_key, await response.text(), ex=600)
             return SimpleNamespace(**user_data)
@@ -79,7 +76,7 @@ def get_current_user(
     return _authenticate
 
 
-def get_current_agent(issuer: str = "squad-agent"):
+def get_current_agent(issuer: str = "squad-agent", scopes: list[str] = None):
     async def _authenticate(
         request: Request,
         authorization: str | None = Header(None, alias="Authorization"),
@@ -104,6 +101,12 @@ def get_current_agent(issuer: str = "squad-agent"):
                 },
                 issuer=issuer,
             )
+            if scopes:
+                if set(payload.get("scopes", [])) & set(scopes) != set(scopes):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail=f"Missing one or more required scopes, required: {scopes}",
+                    )
             async with get_session() as session:
                 agent = (
                     await session.execute(select(Agent).where(Agent.agent_id == agent_id))
