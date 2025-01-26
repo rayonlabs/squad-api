@@ -205,7 +205,7 @@ async def append_log(
     authorization: str | None = Header(None, alias="Authorization"),
     db: AsyncSession = Depends(get_db_session),
 ):
-    await get_current_agent(issuer="squad-agent", scopes=[invocation_id])(request, authorization)
+    await get_current_agent(issuer="squad", scopes=[invocation_id])(request, authorization)
     invocation = await _load_invocation(db, invocation_id, "__agent__")
     if invocation.completed_at:
         raise HTTPException(
@@ -230,7 +230,7 @@ async def upload_file(
     files: Annotated[list[UploadFile], File(max_length=100)] = None,
     db: AsyncSession = Depends(get_db_session),
 ):
-    await get_current_agent(issuer="squad-agent", scopes=[invocation_id])(request, authorization)
+    await get_current_agent(issuer="squad", scopes=[invocation_id])(request, authorization)
     invocation = await _load_invocation(db, invocation_id, "__agent__")
     if invocation.completed_at:
         raise HTTPException(
@@ -263,7 +263,7 @@ async def mark_complete(
     authorization: str | None = Header(None, alias="Authorization"),
     db: AsyncSession = Depends(get_db_session),
 ):
-    await get_current_agent(issuer="squad-agent", scopes=[invocation_id])(request, authorization)
+    await get_current_agent(issuer="squad", scopes=[invocation_id])(request, authorization)
     invocation = await _load_invocation(db, invocation_id, "__agent__")
     if invocation.completed_at:
         raise HTTPException(

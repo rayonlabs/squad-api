@@ -76,7 +76,7 @@ def get_current_user(
     return _authenticate
 
 
-def get_current_agent(issuer: str = "squad-agent", scopes: list[str] = None):
+def get_current_agent(issuer: str = "squad", scopes: list[str] = None):
     async def _authenticate(
         request: Request,
         authorization: str | None = Header(None, alias="Authorization"),
@@ -86,7 +86,12 @@ def get_current_agent(issuer: str = "squad-agent", scopes: list[str] = None):
         """
         token = authorization.split(" ")[-1]
         payload = jwt.decode(token, options={"verify_signature": False})
-        agent_id = payload.get("sub")
+        agent_id = payload.get("agent_id")
+        if not agent_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token.",
+            )
         try:
             payload = jwt.decode(
                 token,

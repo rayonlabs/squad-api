@@ -9,6 +9,7 @@ from squad.agent_config import get_agent, set_agent
 """
 
 MAIN_TEMPLATE = """
+settings.authorization = __tool_args["authorization"]
 agent = CodeAgent(
     system_prompt=__tool_args["system_prompt"],
     additional_authorized_imports=["PIL", "requests", "io"],
