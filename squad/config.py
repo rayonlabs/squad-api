@@ -38,7 +38,7 @@ class Settings(BaseSettings):
         if not os.getenv("JWT_PRIVATE_PATH")
         else open(os.getenv("JWT_PRIVATE_PATH"), "rb").read()
     )
-    dev_auth: Optional[str] = os.getenv("DEV_AUTH")
+    dev_auth: Optional[str] = os.getenv("DEV_CHUTES_AUTH")
 
     # Default for agent max steps.
     default_max_steps: int = int(os.getenv("DEFAULT_MAX_STEPS", "25"))

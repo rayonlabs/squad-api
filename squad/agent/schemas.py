@@ -60,7 +60,7 @@ class Agent(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
-    tools = relationship("Tool", secondary=agent_tools, back_populates="agents")
+    tools = relationship("Tool", secondary=agent_tools, back_populates="agents", lazy="joined")
 
     @validates("name")
     def validate_name(self, _, name):

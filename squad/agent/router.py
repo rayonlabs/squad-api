@@ -10,6 +10,7 @@ from squad.auth import get_current_user
 from squad.database import get_db_session
 from squad.agent.schemas import Agent
 from squad.agent.requests import AgentArgs
+from squad.agent.response import AgentResponse
 from squad.tool.schemas import Tool
 
 router = APIRouter()
@@ -72,10 +73,11 @@ async def list_agents(
         )
     else:
         query = query.where(Agent.user_id == user.user_id)
-    return (await db.execute(query)).unique().scalars().all()
+    agents = (await db.execute(query)).unique().scalars().all()
+    return [AgentResponse.from_orm(agent) for agent in agents]
 
 
-@router.get("/{agent_id_or_name}")
+@router.get("/{agent_id_or_name}", response_model=AgentResponse)
 async def get_agent(
     agent_id_or_name: str,
     db: AsyncSession = Depends(get_db_session),
@@ -89,7 +91,7 @@ async def get_agent(
     return agent
 
 
-@router.post("")
+@router.post("", response_model=AgentResponse)
 async def create_agent(
     args: AgentArgs,
     db: AsyncSession = Depends(get_db_session),
@@ -99,7 +101,7 @@ async def create_agent(
     tool_ids = []
     try:
         agent_args = args.model_dump()
-        if not agent_args.name:
+        if not agent_args.get("name"):
             raise ValueError("Must specify agent name")
         tool_ids = agent_args.pop("tool_ids", [])
         agent = Agent(**agent_args)
@@ -120,7 +122,7 @@ async def create_agent(
     return agent
 
 
-@router.put("/{agent_id_or_name}")
+@router.put("/{agent_id_or_name}", response_model=AgentResponse)
 async def update_agent(
     agent_id_or_name: str,
     args: AgentArgs,
