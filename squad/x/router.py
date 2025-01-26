@@ -16,7 +16,6 @@ from squad.config import settings
 from squad.util import encrypt, decrypt
 from squad.database import get_db_session
 from squad.agent.schemas import Agent
-from squad.agent_config import settings as agent_settings
 
 router = APIRouter()
 
@@ -85,23 +84,14 @@ async def oauth_callback(
             .unique()
             .scalar_one_or_none()
         )
-        if agent:
-            agent.x_access_token = await encrypt(access_token["access_token"])
-            agent.x_refresh_token = await encrypt(access_token["refresh_token"])
-            agent.x_token_expires_at = access_token["expires_at"]
-        else:
-            agent = Agent(
-                name=user.data.username,
-                readme="New account, please populate.",
-                tagline="New account, please populate",
-                model=agent_settings.default_text_gen_model,
-                x_user_id=user_id,
-                x_access_token=await encrypt(access_token["access_token"]),
-                x_refresh_token=await encrypt(access_token["refresh_token"]),
-                x_token_expires_at=int(access_token["expires_at"]),
+        if not agent:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You must create an agent first with an x_user_id or x_username!",
             )
-            db.add(agent)
-
+        agent.x_access_token = await encrypt(access_token["access_token"])
+        agent.x_refresh_token = await encrypt(access_token["refresh_token"])
+        agent.x_token_expires_at = access_token["expires_at"]
         await db.commit()
         await db.refresh(agent)
     except Exception as e:

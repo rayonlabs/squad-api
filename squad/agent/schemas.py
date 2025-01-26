@@ -12,6 +12,7 @@ from sqlalchemy import (
     Column,
     String,
     Integer,
+    Index,
     Boolean,
     BigInteger,
     DateTime,
@@ -61,6 +62,10 @@ class Agent(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     tools = relationship("Tool", secondary=agent_tools, back_populates="agents", lazy="joined")
+
+    __table_args__ = (
+        Index("unique_x_user", "x_username", unique=True, postgresql_where=(x_username != None)),  # noqa
+    )
 
     @validates("name")
     def validate_name(self, _, name):

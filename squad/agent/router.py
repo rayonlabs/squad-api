@@ -12,6 +12,7 @@ from squad.agent.schemas import Agent
 from squad.agent.requests import AgentArgs
 from squad.agent.response import AgentResponse
 from squad.tool.schemas import Tool
+from squad.storage.x import get_users, get_users_by_id
 
 router = APIRouter()
 
@@ -49,6 +50,27 @@ async def _load_tools(db, tool_ids, user_id):
             )
         tools.append(tool)
     return tools
+
+
+async def populate_x_account(db, agent):
+    if agent.x_user_id and agent.x_username:
+        return
+    if agent.x_user_id:
+        users = await get_users_by_id([agent.x_user_id])
+        if not users or not users.get(agent.x_user_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not load X user account with user_id={agent.x_user_id}",
+            )
+        agent.x_username = users[agent.x_user_id]["username"]
+    elif agent.x_username:
+        users = await get_users([agent.x_username])
+        if not users or not users.get(agent.x_username):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not load X user account with username={agent.x_username}",
+            )
+        agent.x_user_id = users[agent.x_username]["id"]
 
 
 @router.get("")
@@ -116,6 +138,7 @@ async def create_agent(
     if tool_ids:
         agent.tools = await _load_tools(db, tool_ids, user.user_id)
 
+    await populate_x_account(db, agent)
     db.add(agent)
     await db.commit()
     await db.refresh(agent)
@@ -151,6 +174,7 @@ async def update_agent(
     tool_ids = body.get("tool_ids")
     if tool_ids is not None:
         agent.tools = await _load_tools(db, tool_ids, user.user_id)
+    await populate_x_account(db, agent)
     await db.commit()
     await db.refresh(agent)
     return agent
