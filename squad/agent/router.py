@@ -6,13 +6,14 @@ import io
 import orjson as json
 import pybase64 as base64
 from typing import Optional, Any, Annotated
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
 from squad.util import now_str
 from squad.auth import get_current_user
 from squad.config import settings
 from squad.database import get_db_session
+from squad.pagination import PaginatedResponse
 from squad.agent.schemas import Agent
 from squad.agent.requests import AgentArgs
 from squad.agent.response import AgentResponse
@@ -21,6 +22,10 @@ from squad.invocation.schemas import Invocation, get_unique_id
 from squad.storage.x import get_users, get_users_by_id
 
 router = APIRouter()
+
+
+class PaginatedAgents(PaginatedResponse):
+    items: list[AgentResponse]
 
 
 async def _load_agent(db, agent_id_or_name, user_id):
@@ -79,11 +84,13 @@ async def populate_x_account(db, agent):
         agent.x_user_id = str(users[agent.x_username]["id"])
 
 
-@router.get("")
+@router.get("", response_model=PaginatedAgents)
 async def list_agents(
     db: AsyncSession = Depends(get_db_session),
     include_public: Optional[bool] = False,
     search: Optional[str] = None,
+    limit: Optional[int] = 10,
+    page: Optional[int] = 0,
     user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
     user_id = user.user_id if user else None
@@ -102,8 +109,25 @@ async def list_agents(
         )
     else:
         query = query.where(Agent.user_id == user_id)
+
+    # Perform a count.
+    total_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(total_query)
+    total = total_result.scalar() or 0
+
+    # Pagination.
+    query = (
+        query.order_by(Agent.created_at.desc())
+        .offset((page or 0) * (limit or 10))
+        .limit((limit or 10))
+    )
     agents = (await db.execute(query)).unique().scalars().all()
-    return [AgentResponse.from_orm(agent) for agent in agents]
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "items": [AgentResponse.from_orm(item) for item in agents],
+    }
 
 
 @router.get("/{agent_id_or_name}", response_model=AgentResponse)

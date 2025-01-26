@@ -24,10 +24,15 @@ from fastapi.responses import StreamingResponse
 from squad.auth import get_current_user, get_current_agent
 from squad.config import settings
 from squad.database import get_db_session
+from squad.pagination import PaginatedResponse
 from squad.invocation.schemas import Invocation
 from squad.invocation.response import InvocationResponse
 
 router = APIRouter()
+
+
+class PaginatedInvocations(PaginatedResponse):
+    items: list[InvocationResponse]
 
 
 async def _load_invocation(db, invocation_id, user_id):
@@ -39,12 +44,14 @@ async def _load_invocation(db, invocation_id, user_id):
     return (await db.execute(query)).unique().scalar_one_or_none()
 
 
-@router.get("", response_model=InvocationResponse)
+@router.get("", response_model=PaginatedInvocations)
 async def list_invocations(
     db: AsyncSession = Depends(get_db_session),
     agent_id: Optional[str] = None,
     include_public: Optional[bool] = False,
     search: Optional[str] = None,
+    limit: Optional[int] = 10,
+    page: Optional[int] = 0,
     user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
     user_id = user.user_id if user else None
@@ -63,7 +70,25 @@ async def list_invocations(
         query = query.where(Invocation.user_id == user_id)
     if agent_id:
         query = query.where(Invocation.agent_id == agent_id)
-    return (await db.execute(query)).unique().scalars().all()
+
+    # Perform a count.
+    total_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(total_query)
+    total = total_result.scalar() or 0
+
+    # Pagination.
+    query = (
+        query.order_by(Invocation.created_at.desc())
+        .offset((page or 0) * (limit or 10))
+        .limit((limit or 10))
+    )
+    result = await db.execute(query)
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "items": [InvocationResponse.from_orm(item) for item in result.unique().scalars().all()],
+    }
 
 
 @router.get("/{invocation_id}", response_model=InvocationResponse)
