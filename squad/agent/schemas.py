@@ -4,7 +4,6 @@ ORM definitions/methods for agents.
 
 import re
 from async_lru import alru_cache
-from fastapi import HTTPException, status
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy import (
@@ -17,7 +16,6 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
 )
-from sqlalchemy.orm import validates
 from sqlalchemy.dialects.postgresql import ARRAY
 from squad.config import settings
 import squad.tool.builtin as builtin
@@ -62,28 +60,11 @@ class Agent(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     tools = relationship("Tool", secondary=agent_tools, back_populates="agents", lazy="joined")
+    invocations = relationship("Invocation", back_populates="agent")
 
     __table_args__ = (
         Index("unique_x_user", "x_username", unique=True, postgresql_where=(x_username != None)),  # noqa
     )
-
-    @validates("name")
-    def validate_name(self, _, name):
-        if not re.match(r"^[a-zA-Z0-9\._\-]{3,64}$", name):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid name, please use alphanumeric, dot, dash or underscore, between 3 and 64 characters.",
-            )
-        return name
-
-    @validates("tagline")
-    def validate_tagline(self, _, tagline):
-        if not tagline or not 3 <= len(tagline) <= 1024:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid tagline, please describe the agent with between 3 and 1024 characters!",
-            )
-        return tagline
 
     def as_executable(self, task: str, max_steps: int = None, source: str = "api"):
         """

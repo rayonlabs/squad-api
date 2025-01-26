@@ -70,8 +70,6 @@ class XR:
         """
         Load active agent usernames.
         """
-        # return {"elonmusk"}
-
         async with get_session() as db:
             result = await db.execute(
                 select(Agent.x_username)

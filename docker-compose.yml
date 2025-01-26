@@ -16,6 +16,21 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_STORAGE_CLASS_REDIRECT_DISABLE: "true"
+    entrypoint: ''
+    command: bash -c 'mkdir -p /data/chutes && minio server /data'
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    restart: always
+
   redis:
     image: redis:7
     ports:
@@ -71,12 +86,18 @@ services:
       ## If you have the actual JWT private cert for chutes auth.
       #- JWT_PRIVATE_PATH=/etc/jwt-cert/squad_priv.pem
       - DEV_CHUTES_AUTH=${CHUTES_API_KEY}
+      - X_API_TOKEN=${X_API_TOKEN}
       - X_API_KEY=${X_API_KEY}
       - X_APP_ID=${X_APP_ID}
       - X_CLIENT_ID=${X_CLIENT_ID}
       - X_CLIENT_SECRET=${X_CLIENT_SECRET}
       - OAUTHLIB_INSECURE_TRANSPORT="1"
       - DEVMODE="1"
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_ENDPOINT_URL=http://minio:9000
+      - AWS_REGION=us-east-1
+      - STORAGE_BUCKET=chutes
     restart: always
     ports:
       - "8000:8000"
@@ -87,7 +108,10 @@ services:
         condition: service_healthy
       opensearch:
         condition: service_healthy
+      minio:
+        condition: service_started
 
 volumes:
   postgres_data:
   opensearch_data:
+  minio_data:

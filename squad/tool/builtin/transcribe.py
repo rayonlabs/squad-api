@@ -1,5 +1,5 @@
 import os
-import base64
+import pybase64 as base64
 import requests
 from smolagents import Tool
 from squad.agent_config import settings

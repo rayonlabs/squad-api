@@ -3,8 +3,11 @@ Application-wide settings.
 """
 
 import os
-from typing import Optional
+import aioboto3
 import redis.asyncio as redis
+from boto3.session import Config
+from contextlib import asynccontextmanager
+from typing import Optional
 from opensearchpy import AsyncOpenSearch
 from tweepy.asynchronous import AsyncClient
 from pydantic_settings import BaseSettings
@@ -31,6 +34,32 @@ class Settings(BaseSettings):
         if os.getenv("REDIS_URL")
         else None
     )
+
+    # S3/object store.
+    aws_access_key_id: str = os.getenv("AWS_ACCESS_KEY_ID", "REPLACEME")
+    aws_secret_access_key: str = os.getenv("AWS_SECRET_ACCESS_KEY", "REPLACEME")
+    aws_endpoint_url: Optional[str] = os.getenv("AWS_ENDPOINT_URL", "http://minio:9000")
+    aws_region: str = os.getenv("AWS_REGION", "local")
+    storage_bucket: str = os.getenv("STORAGE_BUCKET", "squad")
+
+    @property
+    def s3_session(self) -> aioboto3.Session:
+        session = aioboto3.Session(
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key,
+            region_name=self.aws_region,
+        )
+        return session
+
+    @asynccontextmanager
+    async def s3_client(self):
+        session = self.s3_session
+        async with session.client(
+            "s3",
+            endpoint_url=self.aws_endpoint_url,
+            config=Config(signature_version="s3v4"),
+        ) as client:
+            yield client
 
     # JWT private key for chutes auth.
     jwt_private: bytes = (
@@ -76,7 +105,7 @@ class Settings(BaseSettings):
     )
 
     # Squad URLs.
-    squad_base_url: str = os.getenv("SQUAD_BASE_URL", "https://squad.chutes.ai")
+    squad_base_url: str = os.getenv("SQUAD_BASE_URL", "https://squad.game")
     squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://api:8000")
 
     # Tweet storage.

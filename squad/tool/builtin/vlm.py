@@ -1,6 +1,6 @@
 import io
 import re
-import base64
+import pybase64 as base64
 import openai
 import requests
 from PIL import Image
