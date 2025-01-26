@@ -31,12 +31,13 @@ async def list_tools(
     search: Optional[str] = None,
     user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
+    user_id = user.user_id if user else None
     query = select(Tool)
     if search:
         query = query.where(Tool.name.ilike(f"%{search}%"))
     if include_public:
         if user:
-            query = query.where(or_(Tool.user_id == user.user_id, Tool.public.is_(True)))
+            query = query.where(or_(Tool.user_id == user_id, Tool.public.is_(True)))
         else:
             query = query.where(Tool.public.is_(True))
     elif not user:
@@ -45,7 +46,7 @@ async def list_tools(
             detail="You must authenticate to see your own private tools.",
         )
     else:
-        query = query.where(Tool.user_id == user.user_id)
+        query = query.where(Tool.user_id == user_id)
     return (await db.execute(query)).unique().scalars().all()
 
 
@@ -55,7 +56,8 @@ async def get_tool(
     db: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
-    if (tool := await _load_tool(db, tool_id, user.user_id)) is None:
+    user_id = user.user_id if user else None
+    if (tool := await _load_tool(db, tool_id, user_id)) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Tool {tool_id} not found, or is not public",

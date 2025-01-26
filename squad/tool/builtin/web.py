@@ -113,7 +113,10 @@ class WebsiteFetcher(Tool):
 
 class WebsiteScreenshotter(Tool):
     name = "screenshot_webpage"
-    description = "Tool to generate images from URLs, by visiting the URL with a headless browser and taking a screenshot after dynamic content has loaded."
+    description = (
+        "Tool to generate images from URLs, by visiting the URL with a headless browser and taking "
+        "a screenshot after dynamic content has loaded. The output is the path on disk to the image/screenshot."
+    )
     inputs = {
         "url": {
             "type": "string",
@@ -125,7 +128,7 @@ class WebsiteScreenshotter(Tool):
             "description": "simulate mobile browser view instead of standard/desktop",
         },
     }
-    output_type = "image"
+    output_type = "string"
 
     def forward(self, url: str, mobile: bool = False) -> str:
         user_agent = (
@@ -141,7 +144,12 @@ class WebsiteScreenshotter(Tool):
                 except TimeoutError:
                     ...
                 screenshot = page.screenshot()
-                return Image.open(io.BytesIO(screenshot))
+                with tempfile.NamedTemporaryFile(
+                    mode="wb", delete=False, suffix=".webp"
+                ) as tmpfile:
+                    tmpfile.close()
+                    Image.open(io.BytesIO(screenshot)).save(tmpfile.name)
+                    return tmpfile.name
             except Exception as exc:
                 print(f"Screenshot could not be generated: {exc}")
             finally:

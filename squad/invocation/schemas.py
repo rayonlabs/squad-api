@@ -6,6 +6,7 @@ import pybase64 as base64
 import secrets
 from sqlalchemy import (
     select,
+    func,
     Column,
     String,
     DateTime,
@@ -13,7 +14,7 @@ from sqlalchemy import (
     Boolean,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from squad.database import Base, get_session
 
 
@@ -22,7 +23,6 @@ class Invocation(Base):
     invocation_id = Column(String, primary_key=True)
     agent_id = Column(String, ForeignKey("agents.agent_id", ondelete="CASCADE"), nullable=False)
     user_id = Column(String, nullable=False)
-    created_at = Column(DateTime(timezone=True))
     source = Column(String, nullable=False, default="api")
     task = Column(String, nullable=False)
     public = Column(Boolean, default=True)
@@ -30,8 +30,16 @@ class Invocation(Base):
     inputs = Column(ARRAY(String), nullable=True)
     inputs_signed = Column(ARRAY(String), nullable=True)
     outputs = Column(ARRAY(String), nullable=True)
+    answer = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True))
 
     agent = relationship("Agent", back_populates="invocations", lazy="joined")
+
+    @property
+    def stream_key(self):
+        return f"squad:inv:{self.invocation_id}"
 
 
 async def get_invocation(session, _id):

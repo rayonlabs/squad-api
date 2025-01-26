@@ -1,6 +1,11 @@
+"""
+Utilities and helpers.
+"""
+
 import uuid
 import time
 import secrets
+import datetime
 from loguru import logger
 from contextlib import asynccontextmanager
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -106,3 +111,7 @@ async def rate_limit(rate_key, limit, window, incr_by: int = 1) -> bool:
         logger.warning(f"Rate limiting: {rate_key}: {count=} per {window} seconds")
         return True
     return False
+
+
+def now_str():
+    return datetime.datetime.now().isoformat()

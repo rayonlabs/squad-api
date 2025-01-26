@@ -3,11 +3,13 @@ Router to handle agents.
 """
 
 import io
+import orjson as json
 import pybase64 as base64
 from typing import Optional, Any, Annotated
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
+from squad.util import now_str
 from squad.auth import get_current_user
 from squad.config import settings
 from squad.database import get_db_session
@@ -84,12 +86,13 @@ async def list_agents(
     search: Optional[str] = None,
     user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
+    user_id = user.user_id if user else None
     query = select(Agent)
     if search:
         query = query.where(Agent.name.ilike(f"%{search}%"))
     if include_public:
         if user:
-            query = query.where(or_(Agent.user_id == user.user_id, Agent.public.is_(True)))
+            query = query.where(or_(Agent.user_id == user_id, Agent.public.is_(True)))
         else:
             query = query.where(Agent.public.is_(True))
     elif not user:
@@ -98,7 +101,7 @@ async def list_agents(
             detail="You must authenticate to see your own private agents.",
         )
     else:
-        query = query.where(Agent.user_id == user.user_id)
+        query = query.where(Agent.user_id == user_id)
     agents = (await db.execute(query)).unique().scalars().all()
     return [AgentResponse.from_orm(agent) for agent in agents]
 
@@ -109,7 +112,8 @@ async def get_agent(
     db: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
-    if (agent := await _load_agent(db, agent_id_or_name, user.user_id)) is None:
+    user_id = user.user_id if user else None
+    if (agent := await _load_agent(db, agent_id_or_name, user_id)) is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Agent {agent_id_or_name} not found, or is not public",
@@ -219,8 +223,6 @@ async def invoke_agent(
     else:
         form = await request.form()
         task = form.get("task")
-
-    print(f"GOT THIS: {agent_id_or_name=} {files=} {task=}")
     if not task:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -282,4 +284,8 @@ async def invoke_agent(
     )
     db.add(invocation)
     await db.commit()
+    await settings.redis_client.xadd(
+        invocation.stream_key,
+        {"data": json.dumps({"log": "Queued agent call.", "timestamp": now_str()}).decode()},
+    )
     return {"invocation_id": invocation_id}
