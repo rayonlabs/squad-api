@@ -256,9 +256,7 @@ async def invoke_agent(
     invocation_id = await get_unique_id()
     agent = await _load_agent(db, agent_id_or_name, user.user_id)
 
-    # Upload all input files to the storage bucket and generate
-    # presigned URLs to avoid the need for auth in the agent iso pod.
-    presigned_urls = []
+    # Upload all input files to the storage bucket.
     input_paths = []
     async with settings.s3_client() as s3:
         # Form data file uploads.
@@ -272,12 +270,6 @@ async def invoke_agent(
                     settings.storage_bucket,
                     upload_path,
                 )
-                presigned_url = await s3.generate_presigned_url(
-                    "get_object",
-                    Params={"Bucket": settings.storage_bucket, "Key": upload_path},
-                    ExpiresIn=3600,
-                )
-                presigned_urls.append(presigned_url)
 
         # Base64 encoded files from JSON post.
         if files_b64:
@@ -290,12 +282,6 @@ async def invoke_agent(
                     settings.storage_bucket,
                     upload_path,
                 )
-                presigned_url = await s3.generate_presigned_url(
-                    "get_object",
-                    Params={"Bucket": settings.storage_bucket, "Key": upload_path},
-                    ExpiresIn=3600,
-                )
-                presigned_urls.append(presigned_url)
 
     # Create the invocation.
     invocation = Invocation(
@@ -304,7 +290,6 @@ async def invoke_agent(
         user_id=user.user_id,
         task=task,
         inputs=input_paths,
-        inputs_signed=presigned_urls,
     )
     db.add(invocation)
     await db.commit()

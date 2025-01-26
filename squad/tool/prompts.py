@@ -1,6 +1,10 @@
 from smolagents.tools import AUTHORIZED_TYPES
 from smolagents.agents import CODE_SYSTEM_PROMPT
 
+DEFAULT_X_ADDENDUM = """
+Your task is to take on the role of a twitter/X bot with username USERNAME and process or otherwise take some action in response to an incoming tweet/X post.
+"""
+
 DEFAULT_SYSTEM_PROMPT = f"""{CODE_SYSTEM_PROMPT}
 
 Here are some additional rules to follow - you must STRICTLY adhere to this guidance:

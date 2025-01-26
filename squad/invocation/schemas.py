@@ -28,7 +28,6 @@ class Invocation(Base):
     public = Column(Boolean, default=True)
     status = Column(String, nullable=True, default="pending")
     inputs = Column(ARRAY(String), nullable=True)
-    inputs_signed = Column(ARRAY(String), nullable=True)
     outputs = Column(ARRAY(String), nullable=True)
     answer = Column(JSONB, nullable=True)
 

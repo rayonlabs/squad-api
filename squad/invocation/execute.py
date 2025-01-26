@@ -1,64 +1,102 @@
+import argparse
+import os
 import json
 import asyncio
-from squad.auth import User
+import backoff
+import squad.database.orms  # noqa
+from loguru import logger
+from pathlib import Path
+from sqlalchemy import select
+from squad.auth import generate_auth_token
 from squad.database import get_session
-from squad.agent.schemas import Agent
-from squad.tool.schemas import Tool
-from squad.tool.requests import ToolArgs
-from squad.tool.validation import ToolValidator
-from squad.tool.prompts import DEFAULT_SYSTEM_PROMPT
+from squad.config import settings
+from squad.invocation.schemas import Invocation
+
+
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=3,
+    max_tries=7,
+)
+async def _download(path):
+    try:
+        logger.info(f"Attempting to download {path}")
+        async with settings.s3_client() as s3:
+            filename = Path(path).name
+            local_path = os.path.join("/tmp/inputs", filename)
+            await s3.download_file(settings.storage_bucket, path, local_path)
+            logger.info(f"Successfully downloaded {path} to {local_path}")
+    except Exception as exc:
+        logger.error(f"FAILED TO DOWNLOAD: {exc}")
+
+
+async def prepare_execution_environment(invocation_id: str):
+    """
+    Copy all of the invocation input files to disk from the blob store, and
+    generate the code that will be used by the agent for this task.
+    """
+    os.makedirs("/tmp/inputs", exist_ok=True)
+    os.makedirs("/tmp/conf", exist_ok=True)
+    async with get_session() as session:
+        invocation = (
+            (
+                await session.execute(
+                    select(Invocation).where(Invocation.invocation_id == invocation_id)
+                )
+            )
+            .unique()
+            .scalar_one_or_none()
+        )
+        if not invocation:
+            raise Exception(f"Invocation does not exist: {invocation_id}")
+        if invocation.completed_at:
+            raise Exception(f"Invocation already completed: {invocation_id}")
+
+    # Download input files.
+    if invocation.inputs:
+        await asyncio.gather(*[_download(path) for path in invocation.inputs])
+
+    # Create an auth token to use.
+    scopes = [invocation.invocation_id]
+    if invocation.source in ["x", "schedule"]:
+        scopes.append("x")
+    token = generate_auth_token(
+        invocation.user_id,
+        duration_minutes=60,
+        scopes=[scopes],
+    )
+
+    # Configure the task, based on the input type.
+    configmap, code = invocation.agent.as_executable(task=invocation.task, source=invocation.source)
+    configmap["authorization"] = f"Bearer {token}"
+    with open("/tmp/conf/configmap.json", "w") as outfile:
+        outfile.write(json.dumps(configmap, indent=2))
+    with open("/tmp/conf/execute.py", "w") as outfile:
+        outfile.write(code)
+    logger.info(f"Saved configmap and code for {invocation_id=} from {invocation.source=}")
 
 
 async def main():
-    user = User(user_id="dff3e6bb-3a6b-5a2b-9c48-da3abcd5ca5f", username="chutes")
-    async with get_session() as session:
-        dynamic_args = ToolArgs(
-            name="dyn_tool",
-            description="Tool to generate text.",
-            template="llm_tool",
-            public=True,
-            tool_args=dict(
-                model="deepseek-ai/DeepSeek-V3",
-                system_prompt="Always be rude and respond with insults.",
-            ),
-        )
-        await ToolValidator(session, dynamic_args, user).validate()
-
-        static_args = ToolArgs(
-            name="web_search",
-            description="Perform web searches.",
-            template="WebSearcher",
-            public=True,
-        )
-        await ToolValidator(session, static_args, user).validate()
-
-        static_args = ToolArgs(
-            name="x_tweeter",
-            description="Make tweets",
-            template="XTweeter",
-            public=True,
-        )
-        await ToolValidator(session, static_args, user).validate()
-
-        agent = Agent(
-            name="AssBot",
-            readme="Be an ass, all the time.",
-            tagline="No.",
-            model="deepseek-ai/DeepSeek-R1",
-            user_id="123",
-            sys_base_prompt=DEFAULT_SYSTEM_PROMPT,
-            sys_x_prompt="DO STUFF WITH X",
-            sys_api_prompt="DO STUFF WITHOUT X",
-            sys_schedule_prompt="DO STUFF OF YOUR OWN ACCORD",
-        )
-        agent.tools = [
-            Tool(**dynamic_args.model_dump()),
-            Tool(**static_args.model_dump()),
-        ]
-        configmap, code = agent.as_executable(task="tell me a joke about a banana")
-        with open("configmap.json", "w") as outfile:
-            outfile.write(json.dumps(configmap, indent=2))
-        print(code)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--prepare",
+        action="store_true",
+        help="Prepare the execution environment, not run it.",
+    )
+    parser.add_argument(
+        "--id",
+        type=str,
+        required=True,
+        help="The invocation ID to initiaize/execute",
+    )
+    args = parser.parse_args()
+    if args.prepare:
+        await prepare_execution_environment(args.id)
+    else:
+        print("TODO: execute")
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

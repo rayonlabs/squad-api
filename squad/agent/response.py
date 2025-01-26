@@ -26,6 +26,7 @@ class AgentResponse(BaseModel):
     x_username: Optional[str]
     x_last_mentioned_at: Optional[datetime]
     x_searches: Optional[list[str]]
+    x_invoke_filter: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     tools: Optional[list[ToolResponse]]

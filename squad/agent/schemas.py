@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from squad.config import settings
 import squad.tool.builtin as builtin
 from smolagents import Tool as STool
+from squad.tool.prompts import DEFAULT_SYSTEM_PROMPT, DEFAULT_X_ADDENDUM
 from squad.database import Base, generate_uuid, get_session
 from squad.agent_tool.schemas import agent_tools
 from squad.agent.templates import DEFAULT_IMPORTS, MAIN_TEMPLATE
@@ -50,6 +51,7 @@ class Agent(Base):
     x_refresh_token = Column(String, nullable=True)
     x_token_expires_at = Column(BigInteger, nullable=True)
     x_last_mentioned_at = Column(DateTime(timezone=True), server_default=func.now())
+    x_invoke_filter = Column(String, nullable=True)
 
     # Usernames and keywords to regular search for.
     x_searches = Column(ARRAY(String), nullable=True)
@@ -71,14 +73,21 @@ class Agent(Base):
         Get the agent as an executable python script for a given task.
         """
         config_map = {
-            "sys_base_prompt": self.sys_base_prompt,
-            "sys_x_prompt": self.sys_x_prompt,
-            "sys_api_prompt": self.sys_api_prompt,
-            "sys_schedule_prompt": self.sys_schedule_prompt,
+            "system_prompt": self.sys_base_prompt or DEFAULT_SYSTEM_PROMPT,
             "agent_model": self.model,
             "agent_callbacks": [],
             "task": task,
         }
+        if source == "x":
+            config_map["system_prompt"] += "\n" + self.sys_x_prompt or DEFAULT_X_ADDENDUM.replace(
+                "USERNAME", self.x_username
+            )
+        elif source == "api":
+            if self.sys_api_prompt:
+                config_map["system_prompt"] += "\n" + self.sys_api_prompt
+        else:
+            if self.sys_schedule_prompt:
+                config_map["system_prompt"] += "\n" + self.sys_schedule_prompt
         if max_steps:
             config_map["max_steps"] = max_steps
         elif self.default_max_steps:
@@ -104,7 +113,7 @@ class Agent(Base):
             else:
                 ref = getattr(builtin, tool.template)
                 if (
-                    source not in ("X", "schedule")
+                    source not in ("x", "schedule")
                     and tool.template.startswith("X")
                     and tool.template != "XSearcher"
                 ):
@@ -127,7 +136,7 @@ class Agent(Base):
         final_code = "\n".join(
             [
                 "\n".join(imports),
-                'with open("configmap.json") as infile:\n    __tool_args = json.load(infile)',
+                'with open(os.path.join(os.path.dirname(__file__), "configmap.json")) as infile:\n    __tool_args = json.load(infile)',
                 "\n".join(code),
             ]
         )

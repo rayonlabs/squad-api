@@ -1,6 +1,8 @@
 DEFAULT_IMPORTS = """
+import os
 import json
 import asyncio
+import base64
 from smolagents import CodeAgent, OpenAIServerModel
 from squad.agent_config import settings
 from squad.agent_config import get_agent, set_agent
@@ -8,7 +10,7 @@ from squad.agent_config import get_agent, set_agent
 
 MAIN_TEMPLATE = """
 agent = CodeAgent(
-    system_prompt=__tool_args["sys_base_prompt"],
+    system_prompt=__tool_args["system_prompt"],
     additional_authorized_imports=["PIL", "requests", "io"],
     step_callbacks=__tool_args["agent_callbacks"],
     max_steps=__tool_args["max_steps"],

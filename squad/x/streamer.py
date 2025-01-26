@@ -150,6 +150,11 @@ class XR:
                     continue
                 agent = await get_by_x(username, runtime=self._runtime)
                 if agent:
+                    if agent.x_invoke_filter and agent.x_invoke_filter not in tweet["text"]:
+                        logger.info(
+                            f"Skipping tweet, missing filter {username=} {agent.x_invoke_filter=}"
+                        )
+                        continue
                     logger.info(f"Received tweet: {tweet['id']=} {tweet['author_id']=} {username=}")
                     if await rate_limit(f"agent_x_call:{agent.agent_id}", 10, 60):
                         logger.warning(f"Rate limit exceeded for {agent.agent_id=} {username=}")

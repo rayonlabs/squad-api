@@ -69,6 +69,11 @@ class AgentArgs(BaseModel):
         max_items=3,
         description='Up to 3 search strings to use to periodically search X with, can be be complex boolean operators too such as "@fooaccountname OR #bittensor -$btc"',
     )
+    x_invoke_filter: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Only trigger the agent when this literal exact string is found in X posts/tweets",
+    )
     tool_ids: Optional[list[str]] = Field(
         default=None,
         description="List of tool IDs to enable for the agent.",
