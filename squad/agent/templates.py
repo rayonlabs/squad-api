@@ -3,13 +3,27 @@ import os
 import json
 import asyncio
 import base64
+import tempfile
 from smolagents import CodeAgent, OpenAIServerModel
 from squad.agent_config import settings
 from squad.agent_config import get_agent, set_agent
+tempfile.tempdir = "/tmp/outputs"
 """
 
 MAIN_TEMPLATE = """
 settings.authorization = __tool_args["authorization"]
+class _SafeSerializer(json.JSONEncoder):
+    def default(self, obj):
+        try:
+            return super().default(obj)
+        except TypeError:
+            return str(obj)
+def _execution_step_logger(step):
+    try:
+        with open("/tmp/outputs/_steps.log", "a+") as outfile:
+            outfile.write(str(step) + "\n\n")
+    except Exception:
+        ...
 agent = CodeAgent(
     system_prompt=__tool_args["system_prompt"],
     additional_authorized_imports=[
@@ -61,7 +75,7 @@ agent = CodeAgent(
         "own",
         "markitdown",
     ],
-    step_callbacks=__tool_args["agent_callbacks"],
+    step_callbacks=[_execution_step_logger] + __tool_args["agent_callbacks"],
     max_steps=__tool_args["max_steps"],
     tools=[{tool_name_str}],
     model=OpenAIServerModel(
@@ -73,5 +87,7 @@ agent = CodeAgent(
 set_agent(agent)
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
-agent.run(__tool_args["task"])
+final_answer = agent.run(__tool_args["task"])
+with open("/tmp/outputs/_final_answer.json", "w") as outfile:
+    outfile.write(json.dumps(final_answer, cls=_SafeSerializer, indent=2))
 """

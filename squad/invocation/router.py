@@ -285,3 +285,36 @@ async def mark_complete(
         },
     )
     return invocation
+
+
+@router.post("/{invocation_id}/fail", response_model=InvocationResponse)
+async def mark_failed(
+    invocation_id: str,
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await get_current_agent(issuer="squad", scopes=[invocation_id])(request, authorization)
+    invocation = await _load_invocation(db, invocation_id, "__agent__")
+    if invocation.completed_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invocation {invocation_id} has already been marked as completed.",
+        )
+    invocation.completed_at = func.now()
+    invocation.answer = await request.json()
+    invocation.status = "error"
+    await db.commit()
+    await db.refresh(invocation)
+    await settings.redis_client.xadd(
+        invocation.stream_key,
+        {
+            "data": json.dumps(
+                {
+                    "log": f"Invocation is complete, with error: {invocation.answer}",
+                    "timestamp": now_str(),
+                }
+            ).decode()
+        },
+    )
+    return invocation

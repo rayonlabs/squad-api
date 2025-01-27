@@ -1,16 +1,23 @@
 import argparse
 import os
+import time
 import json
+import glob
 import asyncio
 import backoff
+import aiohttp
 import squad.database.orms  # noqa
 from loguru import logger
 from pathlib import Path
 from sqlalchemy import select
+from squad.aiosession import SessionManager
 from squad.auth import generate_auth_token
 from squad.database import get_session
 from squad.config import settings
+from squad.agent_config import settings as agent_settings
 from squad.invocation.schemas import Invocation
+
+SQUAD_SM = SessionManager(base_url=settings.squad_api_base_url)
 
 
 @backoff.on_exception(
@@ -33,6 +40,59 @@ async def _download(path):
         logger.error(f"FAILED TO DOWNLOAD: {exc}")
 
 
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=3,
+    max_tries=7,
+)
+async def _ship_log(invocation_id: str, log: str):
+    async with SQUAD_SM.get_session() as session:
+        await session.post(f"/invocations/{invocation_id}/log", json={"log": log})
+
+
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=3,
+    max_tries=7,
+)
+async def _mark_complete(invocation_id: str, error: str = None):
+    async with SQUAD_SM.get_session() as session:
+        if error:
+            async with session.post(
+                f"/invocations/{invocation_id}/fail", json={"error": error}
+            ) as _:
+                logger.info("Successfully marked the invocation as failed.")
+        else:
+            with open("/tmp/outputs/_final_answer.json") as infile:
+                final_answer = json.load(infile)
+                async with session.post(
+                    f"/invocations/{invocation_id}/complete", json={"answer": final_answer}
+                ) as _:
+                    logger.success("Successfully marked the invocation as completed!")
+
+
+@backoff.on_exception(
+    backoff.constant,
+    Exception,
+    jitter=None,
+    interval=3,
+    max_tries=7,
+)
+async def _upload_file(invocation_id: str, path: str):
+    message = f"Attempting to upload output file {path}"
+    logger.info(message)
+    form = aiohttp.FormData()
+    form.add_field("files", open(path, "rb"), filename=os.path.basename(path))
+    await _ship_log(invocation_id, message)
+    async with SQUAD_SM.get_session() as session:
+        async with session.post(f"/invocations/{invocation_id}/upload", data=form) as _:
+            logger.success("Uploaded one file: {path}")
+
+
 async def prepare_execution_environment(invocation_id: str):
     """
     Copy all of the invocation input files to disk from the blob store, and
@@ -40,6 +100,7 @@ async def prepare_execution_environment(invocation_id: str):
     """
     os.makedirs("/tmp/inputs", exist_ok=True)
     os.makedirs("/tmp/conf", exist_ok=True)
+    os.makedirs("/tmp/outputs", exist_ok=True)
     async with get_session() as session:
         invocation = (
             (
@@ -83,6 +144,112 @@ async def prepare_execution_environment(invocation_id: str):
     logger.info(f"Saved configmap and code for {invocation_id=} from {invocation.source=}")
 
 
+async def execute(invocation_id):
+    """
+    Do the thing!
+    """
+    started_at = time.time()
+    with open("/tmp/conf/configmap.json") as infile:
+        config = json.load(infile)
+    SQUAD_SM._headers = {"Authorization": config["authorization"]}
+
+    # Log collector.
+    async def _capture_logs(stream, name):
+        nonlocal invocation_id, auth_token
+        log_method = logger.info if name == "stdout" else logger.warning
+        with open("/app/logs/{name}.log", "a+") as outfile:
+            while True:
+                line = await stream.readline()
+                if line:
+                    decoded_line = line.decode().strip()
+                    log_method(decoded_line)
+                    outfile.write(decoded_line + "\n")
+                    asyncio.create_task(_ship_log(invocation_id, decoded_line))
+                else:
+                    break
+
+    # Execute.
+    failure_reason = None
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "poetry",
+            "run",
+            "python",
+            "/tmp/conf/execute.py",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(
+            asyncio.gather(
+                _capture_logs(process.stdout, "stdout"),
+                _capture_logs(process.stderr, "stderr"),
+                process.wait(),
+            ),
+            timeout=agent_settings.timeout,
+        )
+        delta = time.time() - started_at
+        if process.returncode == 0:
+            message = f"Successfull executed agent task in {round(delta, 5)} seconds, pushing..."
+            logger.success(message)
+            await _ship_log(invocation_id, message)
+        else:
+            message = f"Agent execution failed after {round(delta, 5)} seconds!"
+            logger.error(message)
+            failure_reason = f"Bad exit code from subprocess: {process.returncode}"
+            await _ship_log(invocation_id, message)
+    except asyncio.TimeoutError:
+        delta = time.time() - started_at
+        message = f"Agent execution timeout after {round(delta, 5)} seconds!"
+        logger.error(message)
+        failure_reason = message
+        try:
+            await _ship_log(invocation_id, message)
+            process.kill()
+            await process.communicate()
+        except Exception:
+            ...
+    except Exception as exc:
+        delta = time.time() - started_at
+        message = f"Unhandled exception executing agent: {exc}"
+        failure_reason = message
+        logger.error(message)
+        try:
+            await _ship_log(invocation_id, message)
+            process.kill()
+            await process.communicate()
+        except Exception:
+            ...
+
+    # Final step, upload all logs, output files, etc.
+    form = aiohttp.FormData()
+    files_to_upload = []
+    for path in glob.glob("/tmp/outputs/*", recursive=True):
+        if os.path.isfile(path):
+            files_to_upload.append(path)
+            form.add_field("files", open(path, "rb"), filename=os.path.basename(path))
+
+    # Upload all at once.
+    async with SQUAD_SM.get_session() as session:
+        await _ship_log(invocation_id, f"Attempting to upload output files: {files_to_upload}")
+        try:
+            async with await session.post(f"/invocations/{invocation_id}/upload", data=form) as _:
+                logger.success("Finished uploading files: {files_to_upload}")
+        except Exception as exc:
+            message = f"Failed bulk output file upload, will try one at a time, error={exc}"
+            logger.error(message)
+            await _ship_log(invocation_id, message)
+
+            # Attempt individual uploads if that fails...
+            for path in files_to_upload:
+                try:
+                    await _upload_file(invocation_id, path)
+                except Exception as exc:
+                    logger.error("Failed bulk upload and individual upload, oh well :(")
+
+    # Final status.
+    await _mark_complete(invocation_id, error=failure_reason)
+
+
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -100,7 +267,7 @@ async def main():
     if args.prepare:
         await prepare_execution_environment(args.id)
     else:
-        print("TODO: execute")
+        await execute(args.id)
 
 
 if __name__ == "__main__":

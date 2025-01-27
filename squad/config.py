@@ -4,14 +4,46 @@ Application-wide settings.
 
 import os
 import aioboto3
+from functools import lru_cache
 import redis.asyncio as redis
 from boto3.session import Config
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Any
 from opensearchpy import AsyncOpenSearch
 from tweepy.asynchronous import AsyncClient
 from pydantic_settings import BaseSettings
 from squad.aiosession import SessionManager
+from kubernetes import client
+from kubernetes.config import load_kube_config, load_incluster_config
+
+
+def create_kubernetes_client(cls: Any = client.CoreV1Api):
+    """
+    Create a k8s client.
+    """
+    try:
+        if os.getenv("KUBERNETES_SERVICE_HOST") is not None:
+            load_incluster_config()
+        else:
+            load_kube_config(config_file=os.getenv("KUBECONFIG"))
+        return cls()
+    except Exception as exc:
+        raise Exception(f"Failed to create Kubernetes client: {str(exc)}")
+
+
+@lru_cache(maxsize=1)
+def k8s_core_client():
+    return create_kubernetes_client()
+
+
+@lru_cache(maxsize=1)
+def k8s_app_client():
+    return create_kubernetes_client(cls=client.AppsV1Api)
+
+
+@lru_cache(maxsize=1)
+def k8s_job_client():
+    return create_kubernetes_client(cls=client.BatchV1Api)
 
 
 class Settings(BaseSettings):
