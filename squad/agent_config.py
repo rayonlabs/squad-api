@@ -20,7 +20,6 @@ def set_agent(agent):
 
 class Settings(BaseSettings):
     agent_id: str = os.getenv("AGENT_ID", "test_agent")
-    request_id: str = os.getenv("REQUEST_ID", "x")
     authorization: Optional[str] = os.getenv("CHUTES_API_TOKEN")
     default_image_model: str = os.getenv("DEFAULT_IMAGE_MODEL", "FLUX.1-schnell")
     default_vlm_model: str = os.getenv("DEFAULT_VLM_MODEL", "OpenGVLab/InternVL2_5-78B")

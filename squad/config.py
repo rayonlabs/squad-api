@@ -100,7 +100,6 @@ class Settings(BaseSettings):
     )
 
     # X OAuth2 stuff.
-    x_api_key: Optional[str] = os.getenv("X_API_KEY")
     x_client_id: Optional[str] = os.getenv("X_CLIENT_ID")
     x_client_secret: Optional[str] = os.getenv("X_CLIENT_SECRET")
     x_api_callback_url: Optional[str] = (

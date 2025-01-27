@@ -1,0 +1,71 @@
+{{- $root := . -}}
+{{- range $idx, $node := .Values.opensearch.nodes }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $node }}-os
+spec:
+  serviceName: {{ $node }}-os
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opensearch
+  template:
+    metadata:
+      labels:
+        app: opensearch
+        ssapp: {{ $node }}-os
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: {{ $node }}
+      initContainers:
+      - name: fix-permissions
+        image: "busybox:latest"
+        command: ["sh", "-c", "chown -R 1000:1000 /usr/share/opensearch/data"]
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: data
+          mountPath: /usr/share/opensearch/data
+      containers:
+      - name: opensearch
+        image: {{ $root.Values.opensearch.image }}
+        resources:
+          limits:
+            cpu: {{ $root.Values.opensearch.resources.limits.cpu }}
+            memory: {{ $root.Values.opensearch.resources.limits.memory }}
+          requests:
+            cpu: {{ $root.Values.opensearch.resources.requests.cpu }}
+            memory: {{ $root.Values.opensearch.resources.requests.memory }}
+        ports:
+        - containerPort: 9200
+          name: rest
+        - containerPort: 9300
+          name: cluster
+        volumeMounts:
+        - name: data
+          mountPath: /usr/share/opensearch/data
+        env:
+        - name: cluster.name
+          value: {{ $root.Values.opensearch.cluster_name }}
+        - name: node.name
+          value: {{ $node }}-os
+        - name: discovery.seed_hosts
+          value: "{{ index $root.Values.opensearch.nodes 0 }}-os-0"
+        - name: cluster.initial_master_nodes
+          value: "{{ index $root.Values.opensearch.nodes 0 }}-os-0"
+        - name: OPENSEARCH_JAVA_OPTS
+          value: "-Xms{{ $root.Values.opensearch.java_opts.heap_size }} -Xmx{{ $root.Values.opensearch.java_opts.heap_size }}"
+        - name: network.host
+          value: "0.0.0.0"
+        - name: DISABLE_INSTALL_DEMO_CONFIG
+          value: "true"
+        - name: DISABLE_SECURITY_PLUGIN
+          value: "true"
+      volumes:
+      - name: data
+        hostPath:
+          path: {{ $root.Values.opensearch.persistence.host_path }}
+          type: DirectoryOrCreate
+{{- end }}

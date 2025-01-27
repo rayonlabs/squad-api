@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    {{- include "api.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "api.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "api.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: jwt-cert
+          secret:
+            secretName: jwt-cert
+            items:
+              - key: squad_pub.pem
+                path: squad_pub.pem
+              - key: squad_priv.pem
+                path: squad_priv.pem
+      containers:
+        - name: api
+          image: "{{ .Values.api.image }}"
+          imagePullPolicy: {{ .Values.api.imagePullPolicy }}
+          command: ["poetry", "run", "uvicorn", "squad.api:app", "--host", "0.0.0.0", "--port", "{{ .Values.api.service.targetPort }}", "--workers", "{{ .Values.api.resources.limits.cpu }}", "--limit-concurrency", "2048"]
+          env:
+            {{- include "squad.sensitiveEnv" . | nindent 12 }}
+            {{- include "squad.commonEnv" . | nindent 12 }}
+            {{- include "squad.agentEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: jwt-cert
+              mountPath: "/etc/jwt-cert"
+              readOnly: true
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.service.targetPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: {{ .Values.api.livenessProbe.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.api.livenessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.api.livenessProbe.timeoutSeconds | default 5 }}
+            successThreshold: {{ .Values.api.livenessProbe.successThreshold | default 1 }}
+            failureThreshold: {{ .Values.api.livenessProbe.failureThreshold | default 3 }}
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: {{ .Values.api.readinessProbe.initialDelaySeconds | default 10 }}
+            periodSeconds: {{ .Values.api.readinessProbe.periodSeconds | default 10 }}
+            timeoutSeconds: {{ .Values.api.readinessProbe.timeoutSeconds | default 5 }}
+            successThreshold: {{ .Values.api.readinessProbe.successThreshold | default 1 }}
+            failureThreshold: {{ .Values.api.readinessProbe.failureThreshold | default 3 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}

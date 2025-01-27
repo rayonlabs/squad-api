@@ -1,0 +1,102 @@
+agentConfig:
+  defaults:
+    models:
+      image: FLUX.1-schnell
+      vlm: OpenGVLab/InternVL2_5-78B
+      llm: deepseek-ai/DeepSeek-R1
+    params:
+      tts:
+        voice: af_sky
+        slug: chutes-kokoro-82m
+
+api:
+  replicaCount: 4
+  image: parachutes/squad-api:latest
+  imagePullPolicy: Always
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    successThreshold: 1
+    failureThreshold: 3
+  resources:
+    requests:
+      cpu: "4"
+      memory: "16Gi"
+    limits:
+      cpu: "4"
+      memory: "16Gi"
+  service:
+    type: NodePort
+    nodePort: 32000
+    port: 8000
+    targetPort: 8000
+  nodeSelector: {}
+  affinity:
+    nodeAffinity: {}
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - api
+          topologyKey: kubernetes.io/hostname
+  tolerations: []
+
+opensearch:
+  image: opensearchproject/opensearch:2.18.0
+  cluster_name: squad-os
+  nodes:
+    - squad-0
+    - squad-1
+  resources:
+    requests:
+      cpu: 4
+      memory: 18Gi
+    limits:
+      cpu: 4
+      memory: 18Gi
+  java_opts:
+    heap_size: 16G
+  persistence:
+    host_path: /var/snap/opensearch-data
+  indexConfig:
+    memories:
+      version: "0"
+      shards: "30"
+      replicas: "1"
+    tweets:
+      version: "0"
+      shards: "30"
+      replicas: "1"
+
+redis:
+  image: redis:7
+  imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  nodeSelector:
+    kubernetes.io/hostname: squad-0
+  affinity: {}
+  tolerations: []
+  resources:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 6379
+  config:
+    customArgs: []
