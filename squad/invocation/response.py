@@ -3,7 +3,7 @@ Response class for invocations.
 """
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime
 
 
@@ -17,7 +17,7 @@ class InvocationResponse(BaseModel):
     status: str
     inputs: Optional[list[str]] = []
     outputs: Optional[list[str]] = []
-    answer: Optional[dict] = None
+    answer: Any = None
     created_at: datetime
     completed_at: Optional[datetime] = None
 

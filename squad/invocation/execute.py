@@ -94,7 +94,7 @@ async def _upload_file(invocation_id: str, path: str):
     await _ship_log(invocation_id, message)
     async with SQUAD_SM.get_session() as session:
         async with session.post(f"/invocations/{invocation_id}/upload", data=form) as _:
-            logger.success("Uploaded one file: {path}")
+            logger.success(f"Uploaded one file: {path}")
 
 
 async def prepare_execution_environment(invocation_id: str):
@@ -241,6 +241,7 @@ async def execute(invocation_id):
 
     # Final status.
     await _mark_complete(invocation_id, error=failure_reason)
+    await SQUAD_SM.close()
 
 
 async def main():
