@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://127.0.0.1:8000")
     x_live_mode: bool = os.getenv("X_LIVE_MODE", "false") == "true"
     timeout: int = int(os.getenv("EXECUTION_TIMEOUT", "5400"))
+    execution_proxy: Optional[str] = os.getenv("EXECUTION_PROXY")
 
 
 settings = Settings()

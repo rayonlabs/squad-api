@@ -21,7 +21,7 @@ app.kubernetes.io/name: redis
 {{- end }}
 
 {{- define "execution.labels" -}}
-app.kubernetes.io/name: agent-execution
+app.kubernetes.io/name: execution
 {{- end }}
 
 {{- define "squad.commonEnv" -}}

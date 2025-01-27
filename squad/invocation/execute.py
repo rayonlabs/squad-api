@@ -31,13 +31,15 @@ SQUAD_SM = SessionManager(base_url=settings.squad_api_base_url)
     interval=3,
     max_tries=7,
 )
-async def _download(path):
+async def _download(invocation_id, path):
     try:
         logger.info(f"Attempting to download {path}")
-        async with settings.s3_client() as s3:
+        async with SQUAD_SM.get_session() as session:
             filename = Path(path).name
             local_path = os.path.join("/tmp/inputs", filename)
-            await s3.download_file(settings.storage_bucket, path, local_path)
+            async with session.get(f"/invocation/{invocation_id}/inputs/{filename}") as resp:
+                with open(local_path, "wb") as outfile:
+                    outfile.write(await resp.read())
             logger.info(f"Successfully downloaded {path} to {local_path}")
             return local_path
     except Exception as exc:
@@ -123,7 +125,9 @@ async def prepare_execution_environment(invocation_id: str):
     # Download input files.
     local_paths = None
     if invocation.inputs:
-        local_paths = await asyncio.gather(*[_download(path) for path in invocation.inputs])
+        local_paths = await asyncio.gather(
+            *[_download(invocation_id, path) for path in invocation.inputs]
+        )
 
     # Create an auth token to use.
     scopes = [invocation.invocation_id]

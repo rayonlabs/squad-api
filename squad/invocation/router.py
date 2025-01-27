@@ -133,6 +133,31 @@ async def get_invocation_output_file(
     )
 
 
+@router.get("/{invocation_id}/inputs/{filename:path}")
+async def get_input_file(
+    invocation_id: str,
+    filename: str,
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await get_current_agent(issuer="squad", scopes=[invocation_id])(request, authorization)
+    invocation = await _load_invocation(db, invocation_id, "__agent__")
+    if not invocation or filename not in invocation.inputs:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Invocation {invocation_id} input file {filename} not found",
+        )
+
+    data = io.BytesIO()
+    async with settings.s3_client() as s3:
+        await s3.download_fileobj(settings.storage_bucket, filename, data)
+    return Response(
+        content=data.getvalue(),
+        headers={"Content-Disposition": f'attachment; filename="{Path(filename).name}"'},
+    )
+
+
 @router.get("/{invocation_id}/stream")
 async def stream_invocation(
     invocation_id: str,
