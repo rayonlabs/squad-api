@@ -119,6 +119,7 @@ def create_invocation_job(mapper, connection, invocation):
                         client.V1Container(
                             name="prepare",
                             image="parachutes/squad-worker:latest",
+                            image_pull_policy="Always",
                             command=[
                                 "poetry",
                                 "run",
@@ -140,6 +141,7 @@ def create_invocation_job(mapper, connection, invocation):
                         client.V1Container(
                             name="execute",
                             image="parachutes/squad-worker:latest",
+                            image_pull_policy="Always",
                             command=[
                                 "poetry",
                                 "run",

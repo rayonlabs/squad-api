@@ -62,6 +62,8 @@ app.kubernetes.io/name: execution
   value: {{ .Values.agentConfig.defaults.models.llm }}
 - name: DEFAULT_TTS_VOICE
   value: {{ .Values.agentConfig.defaults.params.tts.voice }}
+- name: EXECUTION_PROXY
+  value: {{ .Values.agentConfig.execution.proxy.url }}
 {{- end }}
 
 {{- define "squad.sensitiveEnv" -}}
