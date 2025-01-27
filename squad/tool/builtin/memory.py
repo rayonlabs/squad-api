@@ -138,7 +138,7 @@ def memory_creator(
             "you may wish to create a memory of that interaction and form an immediate, long-term opinion of that user. "
             "If you don't already have a first impression of a user, create a memory with: 'firstimpression: ...' "
             "Be sure to include all facts, details, information relevant so that in complete isolation, the thing you wanted to remember could be retrieved from the text. "
-            "Never create duplicate memories, ESPECIALLY firstimpression memorie, those should be singular."
+            "Never create duplicate memories, ESPECIALLY firstimpression memories, those should be singular."
         )
 
     class DynamicMemoryCreator(Tool):
