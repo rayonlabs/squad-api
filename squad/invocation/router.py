@@ -108,7 +108,7 @@ async def get_invocation(
     return invocation
 
 
-@router.get("/{invocation_id}/output/{filename:path}")
+@router.get("/{invocation_id}/download/{filename:path}")
 async def get_invocation_output_file(
     invocation_id: str,
     filename: str,
@@ -240,10 +240,12 @@ async def upload_file(
 
     output_paths = []
     tasks = []
+    dt = invocation.created_at
+    base_path = f"invocations/{dt.year}/{dt.month}/{dt.day}/{invocation_id}/outputs/"
     async with settings.s3_client() as s3:
         for file in files:
             content = await file.read()
-            destination = f"invocations/{invocation_id}/{file.filename}"
+            destination = f"{base_path}{file.filename}"
             output_paths.append(destination)
             tasks.append(
                 s3.upload_fileobj(

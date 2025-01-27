@@ -30,7 +30,6 @@ redis = "^5.2.1"
 async-lru = "^2.0.4"
 oauthlib = "^3.2.2"
 munch = "^4.0.0"
-smolagents = {extras = ["openai", "transformers"], version = "^1.5.0"}
 aiocache = "^0.12.3"
 fastapi-cache2 = "^0.2.2"
 filetype = "^1.2.0"
@@ -41,6 +40,8 @@ beautifulsoup4 = "^4.12.3"
 cryptography = "^44.0.0"
 aioboto3 = "^13.4.0"
 python-multipart = "^0.0.20"
+google-cloud-storage = "^2.19.0"
+smolagents = {extras = ["openai"], version = "^1.5.1"}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.5"

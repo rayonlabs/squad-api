@@ -2,6 +2,7 @@
 Router to handle tools.
 """
 
+import squad.tool.builtin as builtin_tools
 from typing import Optional, Any
 from sqlalchemy import select, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +13,23 @@ from squad.pagination import PaginatedResponse
 from squad.tool.schemas import Tool
 from squad.tool.requests import ToolArgs
 from squad.tool.response import ToolResponse
-from squad.tool.validation import ToolValidator
+from squad.tool.validation import (
+    ToolValidator,
+    ImageArgs,
+    LLMArgs,
+    TTSArgs,
+    MemoryArgs,
+    VLMArgs,
+)
 
 router = APIRouter()
+
+TOOL_MAP = {
+    "vlm_tool": VLMArgs,
+    "llm_tool": LLMArgs,
+    "image_tool": ImageArgs,
+    "tts_tool": TTSArgs,
+}
 
 
 class PaginatedTools(PaginatedResponse):
@@ -28,6 +43,25 @@ async def _load_tool(db, tool_id, user_id):
     else:
         query = query.where(Tool.public.is_(True))
     return (await db.execute(query)).unique().scalar_one_or_none()
+
+
+@router.get("/options")
+async def list_options():
+    model_dump = ToolArgs.model_json_schema()
+    template_options = {}
+    for key in dir(builtin_tools):
+        obj = getattr(builtin_tools, key)
+        if isinstance(obj, type) and obj != builtin_tools.Tool:
+            template_options[key] = None
+        elif obj != builtin_tools.Tool:
+            if key.startswith("memory_"):
+                template_options[key] = MemoryArgs.model_json_schema()
+            elif (arg_class := TOOL_MAP.get(key)) is not None:
+                template_options[key] = arg_class.model_json_schema()
+    return {
+        "request_schema": model_dump,
+        "tool_args": template_options,
+    }
 
 
 @router.get("", response_model=PaginatedTools)

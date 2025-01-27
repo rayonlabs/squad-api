@@ -2,6 +2,7 @@
 Schema for tool creation args.
 """
 
+import types
 from typing import Optional
 from pydantic import BaseModel, Field
 import squad.tool.builtin as builtin
@@ -21,7 +22,13 @@ class ToolArgs(BaseModel):
     )
     template: Optional[str] = Field(
         None,
-        enum=[f for f in dir(builtin) if f.endswith(("_tool", "Tool"))],
+        enum=[
+            f
+            for f in dir(builtin)
+            if f != "Tool"
+            and not f.startswith("_")
+            and not isinstance(getattr(builtin, f, None), types.ModuleType)
+        ],
         description="Template, when using built-in tools",
     )
     public: Optional[bool] = Field(True, description="Allow others to use this tool as well")

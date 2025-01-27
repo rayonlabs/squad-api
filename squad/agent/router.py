@@ -3,6 +3,7 @@ Router to handle agents.
 """
 
 import io
+from datetime import datetime
 import orjson as json
 import pybase64 as base64
 from typing import Optional, Any, Annotated
@@ -258,12 +259,14 @@ async def invoke_agent(
 
     # Upload all input files to the storage bucket.
     input_paths = []
+    now = datetime.now()
+    base_path = f"invocations/{now.year}/{now.month}/{now.day}/{invocation_id}/inputs/"
     async with settings.s3_client() as s3:
         # Form data file uploads.
         if files:
             for file in files:
                 content = await file.read()
-                upload_path = f"invocations/{invocation_id}/{file.filename}"
+                upload_path = f"{base_path}{file.filename}"
                 input_paths.append(upload_path)
                 await s3.upload_fileobj(
                     io.BytesIO(content),
@@ -275,7 +278,7 @@ async def invoke_agent(
         if files_b64:
             for filename, b64_data in files_b64.items():
                 content = base64.b64decode(b64_data)
-                upload_path = f"invocations/{invocation_id}/{filename}"
+                upload_path = f"{base_path}{filename}"
                 input_paths.append(upload_path)
                 await s3.upload_fileobj(
                     io.BytesIO(content),

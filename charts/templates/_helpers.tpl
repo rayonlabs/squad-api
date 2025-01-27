@@ -10,7 +10,7 @@ app.kubernetes.io/name: redis
 
 {{- define "squad.commonEnv" -}}
 - name: PYTHONWARNINGS
-  value: igore
+  value: ignore
 - name: OPENSEARCH_URL
   value: http://opensearch:9200
 - name: DB_POOL_SIZE

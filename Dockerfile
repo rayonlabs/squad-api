@@ -1,5 +1,5 @@
 # Main API.
-FROM python:3.12.8
+FROM python:3.12.8 AS api
 RUN curl -fsSL -o /usr/local/bin/dbmate https://github.com/amacneil/dbmate/releases/latest/download/dbmate-linux-amd64 && chmod +x /usr/local/bin/dbmate
 RUN apt update && apt -y install vim jq bc net-tools curl wget
 RUN useradd squad -s /bin/bash -d /home/squad && mkdir -p /home/squad && chown squad:squad /home/squad
@@ -11,8 +11,81 @@ ADD pyproject.toml /app/
 ADD poetry.lock /app/
 WORKDIR /app
 RUN poetry install --no-root
-RUN poetry run playwright install
 ADD --chown=squad squad /app/squad
 ADD --chown=squad migrations /app/migrations
 ENV PYTHONPATH=/app
 ENTRYPOINT ["poetry", "run", "uvicorn", "squad.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# Worker
+FROM api AS worker
+USER root
+RUN apt -y update && apt -y install \
+    ffmpeg \
+    tesseract-ocr \
+    imagemagick \
+    exiftool \
+    ffmpeg \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libavdevice-dev \
+    libavfilter-dev \
+    libswresample-dev \
+    libcairo2-dev \
+    graphviz \
+    libgraphviz-dev \
+    poppler-utils \
+    libpoppler-dev \
+    libpoppler-cpp-dev \
+    tesseract-ocr \
+    libtesseract-dev \
+    ghostscript \
+    libfreetype6-dev \
+    libfontconfig1-dev
+RUN chown squad:squad /app/poetry.lock /app/pyproject.toml && chmod +w /app/poetry.lock /app/pyproject.toml
+USER squad
+RUN poetry add \
+    playwright \
+    numpy \
+    pandas \
+    requests \
+    scikit-learn \
+    pytz \
+    matplotlib \
+    seaborn \
+    statsmodels \
+    scipy \
+    openpyxl \
+    xlrd \
+    pyyaml \
+    plotly \
+    altair \
+    folium \
+    sympy \
+    opencv-python \
+    markitdown \
+    csvkit \
+    tabulate \
+    pdf2image \
+    PyPDF2 \
+    exifread \
+    rawpy \
+    lxml \
+    beautifulsoup4 \
+    ujson \
+    orjson \
+    py7zr \
+    rarfile \
+    msgpack \
+    protobuf \
+    wandb \
+    pydub \
+    soundfile \
+    ffmpeg-python \
+    pycairo \
+    pygraphviz \
+    pythreejs \
+    vtk \
+    tesseract
+RUN poetry run playwright install

@@ -11,7 +11,7 @@ from squad.agent_config import settings
 class AgentArgs(BaseModel):
     name: Optional[str] = Field(
         None,
-        pattern=r"^[\w\u0080-\uFFFF]{1,24}$",
+        pattern=r"^[\$\w\u0080-\uFFFF\._-]{1,24}$",
         description="Agent name",
     )
     readme: Optional[str] = Field(
