@@ -9,6 +9,8 @@ app.kubernetes.io/name: redis
 {{- end }}
 
 {{- define "squad.commonEnv" -}}
+- name: SQUAD_API_BASE_URL
+  value: https://api.sqd.io
 - name: PYTHONWARNINGS
   value: ignore
 - name: OPENSEARCH_URL
@@ -19,8 +21,6 @@ app.kubernetes.io/name: redis
   value: "32"
 - name: DEFAULT_MAX_STEPS
   value: "25"
-- name: SQUAD_API_BASE_URL
-  value: "api.sqd.io"
 - name: TWEET_INDEX_VERSION
   value: "{{ .Values.opensearch.indexConfig.tweets.version }}"
 - name: TWEET_INDEX_SHARDS
@@ -33,6 +33,8 @@ app.kubernetes.io/name: redis
   value: "{{ .Values.opensearch.indexConfig.memories.shards }}"
 - name: MEMORY_INDEX_REPLICAS
   value: "{{ .Values.opensearch.indexConfig.memories.replicas }}"
+- name: OAUTHLIB_INSECURE_TRANSPORT
+  value: "1"
 {{- end }}
 
 {{- define "squad.agentEnv" }}
@@ -47,7 +49,7 @@ app.kubernetes.io/name: redis
 - name: DEFAULT_TTS_VOICE
   value: {{ .Values.agentConfig.defaults.params.tts.slug }}
 - name: SQUAD_API_BASE_URL
-  value: "api.sqd.io"
+  value: https://api.sqd.io
 {{- end }}
 
 {{- define "squad.sensitiveEnv" -}}
