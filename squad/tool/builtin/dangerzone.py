@@ -14,7 +14,7 @@ class DangerousDynamo(Tool):
         "This is a tool that dynamically creates more tools, if none of the existing tools are particularly well-suited for the task. "
         f"Functions created by this tool can ONLY use one of the following output_type values: {AUTHORIZED_TYPES}\n"
         "You can create any tool so long as it is fairly concise and pure python, not reliant on any authenticated applications, and do not require GPUs, e.g. math tools, web crawling tools, etc. "
-        "You will NEVER try to call the tools after invoking dynamic_tool_writer! The return value is NOTHING, never assign the call to a varaible. "
+        "You will NEVER try to call the tools after invoking dynamic_tool_writer! The return value is NOTHING, never assign the call to a variable. "
         "To use this function, simple invoke dynamic_tool_writer with the function you'd like written, then stop. "
         "You cannot install packages with pip, they must be built-in standard libraries, or Image from PIL. "
         "This tool is only capable of creating a single new tool, never try to call it twice in the same code block. "
