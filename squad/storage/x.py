@@ -445,7 +445,7 @@ async def find_and_index_tweets(
     if last_search_id:
         last_search_id = last_search_id.decode()
     if exclude:
-        search += " " + " ".join([f"-is:{v}" for v in exclude])
+        search = f"({search})" + " ".join([f"-is:{v}" for v in exclude])
     results = await settings.tweepy_client.search_recent_tweets(
         search,
         tweet_fields=["id", "text", "created_at", "public_metrics", "author_id", "attachments"],

@@ -4,6 +4,18 @@ redis-access: "true"
 db-access: "true"
 {{- end }}
 
+{{- define "xStreamer.labels" -}}
+app.kubernetes.io/name: x-streamer
+redis-access: "true"
+db-access: "true"
+{{- end }}
+
+{{- define "xSearcher.labels" -}}
+app.kubernetes.io/name: x-searcher
+redis-access: "true"
+db-access: "true"
+{{- end }}
+
 {{- define "redis.labels" -}}
 app.kubernetes.io/name: redis
 {{- end }}

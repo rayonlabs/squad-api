@@ -53,6 +53,34 @@ api:
           topologyKey: kubernetes.io/hostname
   tolerations: []
 
+xStreamer:
+  image: parachutes/squad-api:latest
+  imagePullPolicy: Always
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+
+xSearcher:
+  image: parachutes/squad-api:latest
+  imagePullPolicy: Always
+  resources:
+    requests:
+      cpu: "2"
+      memory: "4Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+
 opensearch:
   image: opensearchproject/opensearch:2.18.0
   cluster_name: squad-os

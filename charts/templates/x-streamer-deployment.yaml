@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: x-streamer
+  labels:
+    {{- include "xStreamer.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "xStreamer.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "xStreamer.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.xStreamer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.xStreamer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.xStreamer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: jwt-cert
+          secret:
+            secretName: jwt-cert
+            items:
+              - key: squad_pub.pem
+                path: squad_pub.pem
+              - key: squad_priv.pem
+                path: squad_priv.pem
+      containers:
+        - name: streamer
+          image: "{{ .Values.xStreamer.image }}"
+          imagePullPolicy: {{ .Values.xStreamer.imagePullPolicy }}
+          command: ["poetry", "run", "python", "squad/x/streamer.py"]
+          env:
+            {{- include "squad.sensitiveEnv" . | nindent 12 }}
+            {{- include "squad.commonEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: jwt-cert
+              mountPath: "/etc/jwt-cert"
+              readOnly: true
+          resources:
+            {{- toYaml .Values.xStreamer.resources | nindent 12 }}
