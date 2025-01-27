@@ -28,6 +28,7 @@ async def _download(path):
             local_path = os.path.join("/tmp/inputs", filename)
             await s3.download_file(settings.storage_bucket, path, local_path)
             logger.info(f"Successfully downloaded {path} to {local_path}")
+            return local_path
     except Exception as exc:
         logger.error(f"FAILED TO DOWNLOAD: {exc}")
 
@@ -55,8 +56,9 @@ async def prepare_execution_environment(invocation_id: str):
             raise Exception(f"Invocation already completed: {invocation_id}")
 
     # Download input files.
+    local_paths = None
     if invocation.inputs:
-        await asyncio.gather(*[_download(path) for path in invocation.inputs])
+        local_paths = await asyncio.gather(*[_download(path) for path in invocation.inputs])
 
     # Create an auth token to use.
     scopes = [invocation.invocation_id]
@@ -70,7 +72,9 @@ async def prepare_execution_environment(invocation_id: str):
     )
 
     # Configure the task, based on the input type.
-    configmap, code = invocation.agent.as_executable(task=invocation.task, source=invocation.source)
+    configmap, code = invocation.agent.as_executable(
+        task=invocation.task, source=invocation.source, input_files=local_paths
+    )
     configmap["authorization"] = f"Bearer {token}"
     with open("/tmp/conf/configmap.json", "w") as outfile:
         outfile.write(json.dumps(configmap, indent=2))

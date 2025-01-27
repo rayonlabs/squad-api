@@ -68,15 +68,26 @@ class Agent(Base):
         Index("unique_x_user", "x_username", unique=True, postgresql_where=(x_username != None)),  # noqa
     )
 
-    def as_executable(self, task: str, max_steps: int = None, source: str = "api"):
+    def as_executable(
+        self, task: str, max_steps: int = None, source: str = "api", input_files: list[str] = None
+    ):
         """
         Get the agent as an executable python script for a given task.
         """
+        if input_files:
+            task = "\n".join(
+                [
+                    "You have access to the following input files related to the task:",
+                ]
+                + input_files
+                + ["\n", task]
+            )
         config_map = {
             "system_prompt": self.sys_base_prompt or DEFAULT_SYSTEM_PROMPT,
             "agent_model": self.model,
             "agent_callbacks": [],
             "task": task,
+            "tools": {},
         }
         if source == "x":
             config_map["system_prompt"] += "\n" + self.sys_x_prompt or DEFAULT_X_ADDENDUM.replace(
@@ -128,8 +139,10 @@ class Agent(Base):
                 if isinstance(ref, type) and issubclass(ref, STool):
                     code.append(f"{tool.name} = {tool.template}()")
                 else:
-                    config_map[tool.name] = tool.tool_args
-                    code.append(f"{tool.name} = {tool.template}(**__tool_args['{tool.name}'])()")
+                    config_map["tools"][tool.name] = tool.tool_args
+                    code.append(
+                        f"{tool.name} = {tool.template}(**__tool_args['tools']['{tool.name}'])()"
+                    )
                     tool_names.append(tool.name)
 
         code.append(MAIN_TEMPLATE.format(tool_name_str=", ".join(tool_names)))

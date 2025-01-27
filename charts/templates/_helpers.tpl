@@ -46,10 +46,6 @@ app.kubernetes.io/name: redis
   value: {{ .Values.agentConfig.defaults.models.llm }}
 - name: DEFAULT_TTS_VOICE
   value: {{ .Values.agentConfig.defaults.params.tts.voice }}
-- name: DEFAULT_TTS_VOICE
-  value: {{ .Values.agentConfig.defaults.params.tts.slug }}
-- name: SQUAD_API_BASE_URL
-  value: https://api.sqd.io
 {{- end }}
 
 {{- define "squad.sensitiveEnv" -}}
