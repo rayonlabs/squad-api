@@ -8,6 +8,13 @@ agentConfig:
       tts:
         voice: af_sky
         slug: chutes-kokoro-82m
+  execution:
+    proxy_ip: 1.1.1.1
+    proxy:
+      ip: 1.1.1.1
+      port: 65150
+    chutes:
+      ip: 34.128.137.177
 
 api:
   replicaCount: 4

@@ -20,6 +20,10 @@ db-access: "true"
 app.kubernetes.io/name: redis
 {{- end }}
 
+{{- define "execution.labels" -}}
+app.kubernetes.io/name: agent-execution
+{{- end }}
+
 {{- define "squad.commonEnv" -}}
 - name: SQUAD_API_BASE_URL
   value: https://api.sqd.io

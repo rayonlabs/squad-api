@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: execution-network-policy
+  labels:
+    {{- include "execution.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "execution.labels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: {}
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+      to:
+        - namespaceSelector: {}
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.agentConfig.execution.proxy.ip }}/32
+      ports:
+        - protocol: TCP
+          port: {{ .Values.agentConfig.execution.proxy.port }}
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.agentConfig.execution.chutes.ip }}/32
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - protocol: TCP
+          port: 8000
