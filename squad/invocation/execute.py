@@ -37,7 +37,7 @@ async def _download(invocation_id, path):
         async with SQUAD_SM.get_session() as session:
             filename = Path(path).name
             local_path = os.path.join("/tmp/inputs", filename)
-            async with session.get(f"/invocation/{invocation_id}/inputs/{filename}") as resp:
+            async with session.get(f"/invocation/{invocation_id}/inputs/{path}") as resp:
                 with open(local_path, "wb") as outfile:
                     outfile.write(await resp.read())
             logger.info(f"Successfully downloaded {path} to {local_path}")
