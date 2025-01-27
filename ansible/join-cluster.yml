@@ -24,9 +24,6 @@
         - not (is_primary | bool)
         - ping_result.failed
 
-- name: Get join command from primary node
-  hosts: all
-  tasks:
     - name: Check if node is already part of cluster
       shell: microk8s status | grep "acting as a node in a cluster"
       register: cluster_check
@@ -41,7 +38,7 @@
 
     - name: Extract join string
       set_fact:
-        join_string: "{{ join_command.stdout | regex_search('microk8s join 192.168[^ ]+') }}"
+        join_string: "{{ join_command.stdout | regex_search('microk8s join 100.64[^ ]+') }}"
       when: is_primary | bool
 
     - name: Share join command with other plays
@@ -51,9 +48,6 @@
       delegate_facts: true
       when: is_primary | bool
 
-- name: Join worker nodes to cluster
-  hosts: all
-  tasks:
     - name: Join cluster as worker node
       shell: "{{ hostvars['localhost']['join_command'] | replace('\n', '') }} --worker --skip-verify"
       when:
