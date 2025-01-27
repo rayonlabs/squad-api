@@ -19,6 +19,7 @@ spec:
       labels:
         {{- include "api.labels" . | nindent 8 }}
     spec:
+      serviceAccountName: squad
       {{- with .Values.api.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
