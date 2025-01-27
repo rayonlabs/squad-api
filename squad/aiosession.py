@@ -33,7 +33,7 @@ class SessionManager:
                     headers=self._headers,
                     raise_for_status=True,
                 )
-            yield self._session
+        yield self._session
 
     async def close(self):
         """

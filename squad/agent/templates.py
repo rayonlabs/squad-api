@@ -7,6 +7,8 @@ import tempfile
 from smolagents import CodeAgent, OpenAIServerModel
 from squad.agent_config import settings
 from squad.agent_config import get_agent, set_agent
+from smolagents.local_python_executor import BASE_PYTHON_TOOLS
+BASE_PYTHON_TOOLS["open"] = open
 tempfile.tempdir = "/tmp/outputs"
 """
 
@@ -21,7 +23,7 @@ class _SafeSerializer(json.JSONEncoder):
 def _execution_step_logger(step):
     try:
         with open("/tmp/outputs/_steps.log", "a+") as outfile:
-            outfile.write(str(step) + "\n\n")
+            outfile.write(str(step) + "\\n\\n")
     except Exception:
         ...
 agent = CodeAgent(

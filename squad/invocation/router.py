@@ -6,6 +6,7 @@ import io
 import orjson as json
 import asyncio
 import traceback
+from loguru import logger
 from pathlib import Path
 from typing import Optional, Any, Annotated
 from sqlalchemy import select, or_, func
@@ -244,6 +245,7 @@ async def upload_file(
     base_path = f"invocations/{dt.year}/{dt.month}/{dt.day}/{invocation_id}/outputs/"
     async with settings.s3_client() as s3:
         for file in files:
+            logger.info(f"Attempting to upload output file to blob store: {file.filename}")
             content = await file.read()
             destination = f"{base_path}{file.filename}"
             output_paths.append(destination)
@@ -256,6 +258,9 @@ async def upload_file(
             )
         await asyncio.gather(*tasks)
     invocation.outputs = output_paths
+    await db.commit()
+    await db.refresh(invocation)
+    return output_paths
 
 
 @router.post("/{invocation_id}/complete", response_model=InvocationResponse)
@@ -273,7 +278,9 @@ async def mark_complete(
             detail=f"Invocation {invocation_id} has already been marked as completed.",
         )
     invocation.completed_at = func.now()
-    invocation.answer = await request.json()
+    raw_json = await request.json()
+    invocation.answer = raw_json.get("answer") or raw_json
+    invocation.status = "success"
     await db.commit()
     await db.refresh(invocation)
     await settings.redis_client.xadd(

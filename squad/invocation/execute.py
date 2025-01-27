@@ -1,3 +1,7 @@
+"""
+Agent invocation execution entrypoints.
+"""
+
 import argparse
 import os
 import time
@@ -155,17 +159,18 @@ async def execute(invocation_id):
 
     # Log collector.
     async def _capture_logs(stream, name):
-        nonlocal invocation_id, auth_token
+        nonlocal invocation_id
         log_method = logger.info if name == "stdout" else logger.warning
-        with open("/app/logs/{name}.log", "a+") as outfile:
+        with open(f"/tmp/outputs/_{name}.log", "a+") as outfile:
             while True:
                 line = await stream.readline()
                 if line:
                     decoded_line = line.decode().strip()
                     log_method(decoded_line)
                     outfile.write(decoded_line + "\n")
-                    asyncio.create_task(_ship_log(invocation_id, decoded_line))
+                    await _ship_log(invocation_id, decoded_line)
                 else:
+                    logger.info(f"Done logging: {name}")
                     break
 
     # Execute.
@@ -221,30 +226,18 @@ async def execute(invocation_id):
             ...
 
     # Final step, upload all logs, output files, etc.
-    form = aiohttp.FormData()
     files_to_upload = []
     for path in glob.glob("/tmp/outputs/*", recursive=True):
         if os.path.isfile(path):
             files_to_upload.append(path)
-            form.add_field("files", open(path, "rb"), filename=os.path.basename(path))
-
-    # Upload all at once.
-    async with SQUAD_SM.get_session() as session:
-        await _ship_log(invocation_id, f"Attempting to upload output files: {files_to_upload}")
+    message = f"Attempting to upload output files: {files_to_upload}"
+    logger.info(message)
+    await _ship_log(invocation_id, message)
+    for path in files_to_upload:
         try:
-            async with await session.post(f"/invocations/{invocation_id}/upload", data=form) as _:
-                logger.success("Finished uploading files: {files_to_upload}")
+            await _upload_file(invocation_id, path)
         except Exception as exc:
-            message = f"Failed bulk output file upload, will try one at a time, error={exc}"
-            logger.error(message)
-            await _ship_log(invocation_id, message)
-
-            # Attempt individual uploads if that fails...
-            for path in files_to_upload:
-                try:
-                    await _upload_file(invocation_id, path)
-                except Exception as exc:
-                    logger.error("Failed bulk upload and individual upload, oh well :(")
+            logger.error(f"Failed file upload: {exc}")
 
     # Final status.
     await _mark_complete(invocation_id, error=failure_reason)

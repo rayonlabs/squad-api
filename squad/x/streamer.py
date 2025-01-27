@@ -16,8 +16,49 @@ from squad.agent.schemas import Agent, get_by_x
 from squad.storage.x import index_tweets, tweet_to_index_format, get_users_by_id
 
 # Static rules.
+STATIC_ACCOUNTS = " OR ".join(
+    [
+        "@rayon_labs",
+        "@namoray_dev",
+        "@jon_durbin",
+        "@const_reborn",
+        "@opentensor",
+        "@shibshib89",
+        "@mogmachine",
+        "@0xcarro",
+        "@WSquires",
+        "@macrocrux",
+        "@Old_Samster",
+        "@EvanMalanga",
+        "@RahulKumaran4",
+        "@JosephJacks_",
+        "@xponentcrisis",
+        "@0xarrash",
+        "@angad_ai",
+        "@taostats",
+        "@mogmachine",
+        "@TAOTemplar",
+        "@kenjonmiyachi",
+        "@gylestensora",
+        "@KeithSingery",
+        "@brodyadreon",
+        "@bittingthembits",
+        "@evert_scott",
+        "@badenglishtea",
+        "@DreadBong0",
+        "@TensorDetective",
+        "@ai_bond_connery",
+        "@brodydotai",
+        "@VenturaLabs",
+        "@tao_minersunion",
+        "@21RoundTable",
+    ]
+)
+
 STATIC_RULES = {
-    "($btc OR #bittensor OR $tao OR @rayon_labs OR @namoray_dev OR @jon_durbin OR @const_reborn OR @opentensor) -$fet -$FET -$eth -$ETH -$fart -$FART -$xrp -$XRP -$sol -$SOL -$trx -$TRX -$pepe -$PEPE -$aapl -$AAPL -$trump -$TRUMP -🔴LIVE -airdrop -#solana -#SOLANA -AIRDROP -Airdrop -$BTCAI -$btcai -is:retweet -is:reply",
+    f"($btc OR #bittensor OR $tao OR {STATIC_ACCOUNTS}"
+    "-$fet -$FET -$eth -$ETH -$fart -$FART -$xrp -$XRP -$sol -$SOL -$trx -$TRX -$pepe -$PEPE -$aapl -$AAPL "
+    "-$trump -$TRUMP -🔴LIVE -airdrop -#solana -#SOLANA -AIRDROP -Airdrop -$BTCAI -$btcai -is:retweet -is:reply",
 }
 
 
