@@ -71,6 +71,8 @@ app.kubernetes.io/name: execution
 {{- end }}
 
 {{- define "squad.sensitiveEnv" -}}
+- name: MEMCACHED
+  value: memcached
 - name: REDIS_PASSWORD
   valueFrom:
     secretKeyRef:

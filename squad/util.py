@@ -123,7 +123,10 @@ async def rate_limit(rate_key, limit, window, incr_by: int = 1) -> bool:
     try:
         count = 0
         if incr_by:
-            count = await settings.memcache.incr(cache_key, incr_by)
+            try:
+                count = await settings.memcache.incr(cache_key, incr_by)
+            except Exception:
+                count = None
             if count is None:
                 await settings.memcache.set(cache_key, str(incr_by).encode())
                 count = incr_by
