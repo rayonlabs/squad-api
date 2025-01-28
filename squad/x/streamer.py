@@ -56,7 +56,7 @@ STATIC_ACCOUNTS = " OR ".join(
 )
 
 STATIC_RULES = {
-    f"($btc OR #bittensor OR $tao OR {STATIC_ACCOUNTS}"
+    f"(#bittensor OR $tao OR {STATIC_ACCOUNTS})"
     "-$fet -$FET -$eth -$ETH -$fart -$FART -$xrp -$XRP -$sol -$SOL -$trx -$TRX -$pepe -$PEPE -$aapl -$AAPL "
     "-$trump -$TRUMP -🔴LIVE -airdrop -#solana -#SOLANA -AIRDROP -Airdrop -$BTCAI -$btcai -is:retweet -is:reply",
 }

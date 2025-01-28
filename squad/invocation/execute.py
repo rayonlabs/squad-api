@@ -122,15 +122,8 @@ async def prepare_execution_environment(invocation_id: str):
         if invocation.completed_at:
             raise Exception(f"Invocation already completed: {invocation_id}")
 
-    # Download input files.
-    local_paths = None
-    if invocation.inputs:
-        local_paths = await asyncio.gather(
-            *[_download(invocation_id, path) for path in invocation.inputs]
-        )
-
     # Create an auth token to use.
-    scopes = [invocation.invocation_id]
+    scopes = [invocation_id]
     if invocation.source in ["x", "schedule"]:
         scopes.append("x")
     token = generate_auth_token(
@@ -139,6 +132,14 @@ async def prepare_execution_environment(invocation_id: str):
         agent_id=invocation.agent_id,
         scopes=scopes,
     )
+    SQUAD_SM._headers = {"Authorization": f"Bearer {token}"}
+
+    # Download input files.
+    local_paths = None
+    if invocation.inputs:
+        local_paths = await asyncio.gather(
+            *[_download(invocation_id, path) for path in invocation.inputs]
+        )
 
     # Configure the task, based on the input type.
     configmap, code = invocation.agent.as_executable(
@@ -259,13 +260,13 @@ async def main():
         "--id",
         type=str,
         required=True,
-        help="The invocation ID to initiaize/execute",
+        help="The invocation ID to initialize/execute",
     )
     args = parser.parse_args()
     if args.prepare:
-        await prepare_execution_environment(args.id)
+        await prepare_execution_environment(args.id[3:])
     else:
-        await execute(args.id)
+        await execute(args.id[3:])
 
 
 if __name__ == "__main__":

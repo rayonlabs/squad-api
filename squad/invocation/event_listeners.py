@@ -105,6 +105,9 @@ def create_invocation_job(mapper, connection, invocation):
                 spec=client.V1PodSpec(
                     volumes=[
                         client.V1Volume(
+                            name="tmpdir", empty_dir=client.V1EmptyDirVolumeSource(size_limit="4Gi")
+                        ),
+                        client.V1Volume(
                             name="jwt-cert",
                             secret=client.V1SecretVolumeSource(
                                 secret_name="jwt-cert",
@@ -113,7 +116,7 @@ def create_invocation_job(mapper, connection, invocation):
                                     client.V1KeyToPath(key="squad_priv.pem", path="squad_priv.pem"),
                                 ],
                             ),
-                        )
+                        ),
                     ],
                     init_containers=[
                         client.V1Container(
@@ -127,13 +130,14 @@ def create_invocation_job(mapper, connection, invocation):
                                 "squad/invocation/execute.py",
                                 "--prepare",
                                 "--id",
-                                invocation.invocation_id,
+                                f"id:{invocation.invocation_id}",
                             ],
                             env=get_environment_variables(),
                             volume_mounts=[
                                 client.V1VolumeMount(
                                     name="jwt-cert", mount_path="/etc/jwt-cert", read_only=True
-                                )
+                                ),
+                                client.V1VolumeMount(name="tmpdir", mount_path="/tmp"),
                             ],
                         )
                     ],
@@ -148,9 +152,10 @@ def create_invocation_job(mapper, connection, invocation):
                                 "python",
                                 "squad/invocation/execute.py",
                                 "--id",
-                                invocation.invocation_id,
+                                f"id:{invocation.invocation_id}",
                             ],
                             env=[
+                                client.V1EnvVar(name="PYTHONWARNINGS", value="ignore"),
                                 client.V1EnvVar(name="AGENT_ID", value=invocation.agent_id),
                                 client.V1EnvVar(name="SQUAD_API_BASE_URL", value="http://api:8000"),
                                 client.V1EnvVar(
@@ -161,8 +166,11 @@ def create_invocation_job(mapper, connection, invocation):
                                 ),
                                 client.V1EnvVar(
                                     name="NO_PROXY",
-                                    value="api,api:8000,api:*,api.chutes.ai,*.chutes.ai,.chutes.ai,localhost,127.0.0.1,127.0.0.1:*,api.squad,api.squad.svc.cluster.local,api.squad:8000,api.squad.svc.cluster.local:8000",
+                                    value="api,api:8000,api.chutes.ai,*.chutes.ai,.chutes.ai,localhost,127.0.0.1,127.0.0.1:8000,api.squad,api.squad.svc.cluster.local,api.squad:8000,api.squad.svc.cluster.local:8000",
                                 ),
+                            ],
+                            volume_mounts=[
+                                client.V1VolumeMount(name="tmpdir", mount_path="/tmp"),
                             ],
                         )
                     ],
