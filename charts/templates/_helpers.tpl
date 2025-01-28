@@ -20,6 +20,10 @@ db-access: "true"
 app.kubernetes.io/name: redis
 {{- end }}
 
+{{- define "memcached.labels" -}}
+app.kubernetes.io/name: memcached
+{{- end }}
+
 {{- define "execution.labels" -}}
 app.kubernetes.io/name: execution
 {{- end }}

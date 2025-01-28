@@ -4,6 +4,7 @@ Application-wide settings.
 
 import os
 import aioboto3
+import aiomcache
 from functools import lru_cache
 import redis.asyncio as redis
 from boto3.session import Config
@@ -64,6 +65,13 @@ class Settings(BaseSettings):
     redis_client: Optional[redis.Redis] = (
         redis.Redis.from_url(os.getenv("REDIS_URL", "redis://:redispassword@redis:6379/0"))
         if os.getenv("REDIS_URL")
+        else None
+    )
+
+    # Memcached.
+    memcache: Optional[aiomcache.Client] = (
+        aiomcache.Client(os.getenv("MEMCACHED", "memcached"), 11211)
+        if os.getenv("MEMCACHED")
         else None
     )
 

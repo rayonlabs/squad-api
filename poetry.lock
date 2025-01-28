@@ -203,6 +203,18 @@ dev = ["attribution (==1.8.0)", "black (==24.8.0)", "build (>=1.2)", "coverage (
 docs = ["sphinx (==8.0.2)", "sphinx-mdinclude (==0.6.2)"]
 
 [[package]]
+name = "aiomcache"
+version = "0.8.2"
+description = "Minimal pure python memcached client"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "aiomcache-0.8.2-py3-none-any.whl", hash = "sha256:9d78d6b6e74e775df18b350b1cddfa96bd2f0a44d49ad27fa87759a3469cef5e"},
+    {file = "aiomcache-0.8.2.tar.gz", hash = "sha256:43b220d7f499a32a71871c4f457116eb23460fa216e69c1d32b81e3209e51359"},
+]
+
+[[package]]
 name = "aiosignal"
 version = "1.3.2"
 description = "aiosignal: a list of registered asynchronous callbacks"
@@ -4571,4 +4583,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "92675de0fd452265575e0a0fe57fe0c7d22fd739f584c98dde01ca1b19ecf742"
+content-hash = "76b3459ce95e2d561087b2c28c31495568f62df3e7dfd07f535f62fdf485c79d"

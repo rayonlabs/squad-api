@@ -35,7 +35,7 @@ async def update_index():
                 )
                 bad_search = await settings.redis_client.get(search_key)
                 if bad_search:
-                    logger.warning(f"Skipping bad search: {bad_search}")
+                    logger.warning(f"Skipping bad search: {search}")
                     continue
 
                 # Check if we should rate limit first (without incrementing)

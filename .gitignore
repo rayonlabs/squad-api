@@ -1,5 +1,6 @@
 charts/charts.yaml
 *.pem
+real-values.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

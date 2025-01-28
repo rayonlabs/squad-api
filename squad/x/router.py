@@ -4,6 +4,7 @@ Router for X interactions.
 
 import time
 import tweepy
+from loguru import logger
 from functools import lru_cache
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -13,11 +14,14 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, s
 from fastapi.responses import RedirectResponse
 from squad.auth import get_current_agent
 from squad.config import settings
-from squad.util import encrypt, decrypt
+from squad.util import encrypt, decrypt, contains_nsfw, contains_hate_speech
 from squad.database import get_db_session
 from squad.agent.schemas import Agent
 
 router = APIRouter()
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+ALLOWED_VIDEO_TYPES = {"video/mp4"}
 
 
 @lru_cache(maxsize=1)
@@ -130,11 +134,33 @@ async def tweet(
     agent: Agent = Depends(get_current_agent(scopes=["x"])),
     db: AsyncSession = Depends(get_db_session),
 ):
+    # Block hate speech and NSFW media, otherwise allow.
+    if await contains_hate_speech([text]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Hate speech detected: {text}",
+        )
+
     client = await get_agent_x_client(db, agent)
     try:
         media_ids = []
         if media:
+            if media.content_type not in ALLOWED_IMAGE_TYPES | ALLOWED_VIDEO_TYPES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Unsupported media type: {media.content_type}",
+                )
+            is_image = media.content_type in ALLOWED_IMAGE_TYPES
             file_bytes = await media.read()
+            if is_image:
+                if await contains_nsfw(file_bytes):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="NSFW content detected in media: {media.filename}",
+                    )
+            else:
+                # XXX TODO filter videos...
+                logger.warning(f"TODO add checks for NSFW on {media.filename}")
             media_obj = client.media_upload(filename=media.filename, file=file_bytes)
             media_ids.append(media_obj.media_id)
         response = client.create_tweet(
@@ -193,6 +219,11 @@ async def quote_tweet(
     agent: Agent = Depends(get_current_agent(scopes=["x"])),
     db: AsyncSession = Depends(get_db_session),
 ):
+    if await contains_hate_speech([request.text]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Hate speech detected: {request.text}",
+        )
     client = await get_agent_x_client(db, agent)
     try:
         response = client.create_tweet(

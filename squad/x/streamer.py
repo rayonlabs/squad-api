@@ -1,5 +1,6 @@
 import asyncio
 import time
+import json
 import traceback
 import squad.database.orms  # noqa
 from loguru import logger
@@ -10,10 +11,15 @@ from tweepy.asynchronous import AsyncStreamingClient
 from tweepy.errors import TweepyException
 from squad.auth import generate_auth_token
 from squad.config import settings
-from squad.util import rate_limit
+from squad.util import rate_limit, now_str
 from squad.database import get_session
 from squad.agent.schemas import Agent, get_by_x
+from squad.invocation.schemas import get_unique_id, Invocation
 from squad.storage.x import index_tweets, tweet_to_index_format, get_users_by_id
+
+# Processing rate limit.
+RATE_LIMIT = 100
+RATE_LIMIT_WINDOW = 60
 
 # Static rules.
 STATIC_ACCOUNTS = " OR ".join(
@@ -60,6 +66,40 @@ STATIC_RULES = {
     "-$fet -$FET -$eth -$ETH -$fart -$FART -$xrp -$XRP -$sol -$SOL -$trx -$TRX -$pepe -$PEPE -$aapl -$AAPL "
     "-$trump -$TRUMP -🔴LIVE -airdrop -#solana -#SOLANA -AIRDROP -Airdrop -$BTCAI -$btcai -is:retweet -is:reply",
 }
+
+
+async def _create_invocation(agent, tweet):
+    """
+    Create the invocation, which in turn will trigger the event.
+    """
+    task_text = "You have received the following tweet:\n" + json.dumps(tweet, indent=2)
+    try:
+        invocation_id = await get_unique_id()
+        async with get_session() as session:
+            invocation = Invocation(
+                invocation_id=invocation_id,
+                agent_id=agent.agent_id,
+                user_id=agent.user_id,
+                task=task_text,
+                source="x",
+                public=agent.public,
+            )
+            session.add(invocation)
+            await session.commit()
+            await session.refresh(invocation)
+            await settings.redis_client.xadd(
+                invocation.stream_key,
+                {
+                    "data": json.dumps(
+                        {"log": "Queued agent call from X.", "timestamp": now_str()}
+                    ).decode()
+                },
+            )
+            logger.success(
+                f"Successfully triggered invocation of {agent.agent_id=} {invocation_id=}"
+            )
+    except Exception as exc:
+        logger.error(f"Failed to create invocation {agent.agent_id=} {invocation_id=}: {exc}")
 
 
 class XR:
@@ -173,6 +213,12 @@ class XR:
         """
 
         async def on_tweet(tweet_obj):
+            # Make sure we're not getting overwhelmed.
+            if await rate_limit("x:all_stream", RATE_LIMIT, RATE_LIMIT_WINDOW, incr_by=0):
+                logger.warning("Getting overwhelmed from X stream, backing off...")
+                return
+            await rate_limit("x:all_stream", RATE_LIMIT, RATE_LIMIT_WINDOW)
+
             # Always index the tweets, whether they are useful triggers or not.
             tweet = tweet_obj.data
             async with self._index_lock:
@@ -200,7 +246,7 @@ class XR:
                     if await rate_limit(f"agent_x_call:{agent.agent_id}", 10, 60):
                         logger.warning(f"Rate limit exceeded for {agent.agent_id=} {username=}")
                         continue
-                    logger.error(f"TODO: X trigger for {agent.agent_id=} {username=}")
+                    await _create_invocation(agent, tweet)
 
         async def on_error(error):
             logger.error(f"X stream error: {error}")

@@ -2,10 +2,11 @@
 Utilities and helpers.
 """
 
-import uuid
+import hashlib
 import time
 import secrets
 import datetime
+from functools import lru_cache
 from loguru import logger
 from contextlib import asynccontextmanager
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -14,7 +15,26 @@ from cryptography.hazmat.primitives import padding
 from sqlalchemy import text
 from squad.database import get_session
 from squad.config import settings
+from squad.aiosession import SessionManager
 from squad.auth import generate_auth_token
+
+
+NSFW_SM = SessionManager(
+    base_url="https://chutes-nsfw-classifier.chutes.ai",
+)
+HATE_SM = SessionManager(
+    base_url="https://chutes-hate-speech-detector.chutes.ai",
+)
+
+
+@lru_cache(maxsize=1)
+def _get_chutes_token(_: int):
+    return f"Bearer {generate_auth_token(settings.default_user_id, duration_minutes=5)}"
+
+
+def get_chutes_token():
+    now = int(time.time())
+    return _get_chutes_token(now - (now % 360))
 
 
 @asynccontextmanager
@@ -97,19 +117,58 @@ async def rate_limit(rate_key, limit, window, incr_by: int = 1) -> bool:
     """
     Arbitrary keyed rate limits.
     """
-    cache_key = "squad:rate:" + str(uuid.uuid5(uuid.NAMESPACE_OID, rate_key))
-    now = time.time()
-    async with settings.redis_client.pipeline() as pipe:
-        await pipe.zremrangebyscore(cache_key, 0, now - window)
-        await pipe.zcard(cache_key)
-        # Add incr_by timestamps spread over a tiny interval to avoid collisions
-        for i in range(incr_by):
-            await pipe.zadd(cache_key, {str(now + i / 1000): now + i / 1000})
-        await pipe.expire(cache_key, window)
-        _, count, *_ = await pipe.execute()
-    if count >= limit:
-        logger.warning(f"Rate limiting: {rate_key}: {count=} per {window} seconds")
-        return True
+    now = int(time.time())
+    suffix = now - (now % window)
+    cache_key = ("squad:rate:" + hashlib.md5(f"{rate_key}:{suffix}".encode()).hexdigest()).encode()
+    try:
+        count = 0
+        if incr_by:
+            count = await settings.memcache.incr(cache_key, incr_by)
+            if count is None:
+                await settings.memcache.set(cache_key, str(incr_by).encode())
+                count = incr_by
+        else:
+            value = await settings.memcache.get(cache_key)
+            if value:
+                try:
+                    count = int(value)
+                except ValueError:
+                    count = 0
+        if count > limit:
+            logger.warning(f"Rate limiting: {rate_key}: {count=} per {window} seconds")
+            return True
+        return False
+    except Exception as exc:
+        logger.error(f"Failed performing rate limit checks: {exc}")
+    return False
+
+
+async def contains_hate_speech(texts: list[str]):
+    """
+    Check if text has hate speach.
+    """
+    try:
+        async with HATE_SM.get_session() as session:
+            async with session.post(
+                "/predict", headers={"Authorzation": get_chutes_token()}, json={"texts": texts}
+            ) as resp:
+                result = await resp.json()
+                for idx in range(len(result)):
+                    item = result[idx]
+                    if item.get("label") == "hate speech":
+                        logger.warning(f"Detected hate speech: {item} -> {texts[idx]}")
+                        return True
+                logger.info(f"No hate speech detected: {result}")
+    except Exception as exc:
+        logger.warning(f"Error checking hate speech content: {exc}")
+    return False
+
+
+async def contains_nsfw(media):
+    """
+    Check if the target media has NSFW content.
+    """
+    logger.warning("TODO: nsfw")
     return False
 
 

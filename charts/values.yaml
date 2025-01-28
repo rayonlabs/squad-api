@@ -10,14 +10,14 @@ agentConfig:
         slug: chutes-kokoro-82m
   execution:
     proxy:
-      url: http://user:pass@1.1.1.1:1234
+      url: http://user:password@1.1.1.1:1234
       ip: 1.1.1.1
       port: 1234
     chutes:
       ip: 34.128.137.177
 
 api:
-  replicaCount: 4
+  replicaCount: 1
   image: parachutes/squad-api:latest
   imagePullPolicy: Always
   livenessProbe:
@@ -135,3 +135,24 @@ redis:
     port: 6379
   config:
     customArgs: []
+
+
+memcached:
+  image: memcached:1.6.34
+  imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+  resources:
+    requests:
+      cpu: 1
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 11211
+  config:
+    memory_mb: 800
