@@ -27,6 +27,8 @@ async def perform_brave_search(
     search: BraveSearchParams,
     current_user: Any = Depends(get_current_user()),
 ):
+    if not search.count:
+        search.count = 5
     params = search.dict()
     async with settings.brave_sm.get_session() as session:
         async with session.get("/res/v1/web/search", params=params) as resp:

@@ -5,6 +5,7 @@ X/twitter tools.
 import os
 import requests
 from smolagents import Tool
+from squad.util import rerank
 from squad.data.schemas import XSearchParams
 from squad.storage.x import Tweet
 from squad.agent_config import settings
@@ -14,16 +15,21 @@ class XSearcher(Tool):
     name = "x_search"
     description = "Tool for performing searches on X (formerly twitter) to find information and media that might be related to a topic."
     inputs = {
-        "text": {
+        "query": {
             "type": "string",
             "description": "search query string to use when performing the search",
+        },
+        "top_n": {
+            "type": "integer",
+            "nullable": True,
+            "description": "perform reranking to return only the top top_n related tweets",
         },
         "extra_arguments": {
             "type": "object",
             "description": (
                 "Optional search flags/settings to augment, limit, or filter results. "
                 "Must be passed as a dict with key value pairs, where values are always strings. "
-                "Supported extra_argument values are the following (but do not include 'text'): "
+                "Supported extra_argument values are the following (but do not include 'query'): "
                 f"{XSearchParams.model_json_schema()}\n"
                 "Be sure to pass `has=['photo']` when searching for images."
             ),
@@ -32,8 +38,8 @@ class XSearcher(Tool):
     }
     output_type = "string"
 
-    def forward(self, text: str, extra_arguments: dict = {}):
-        params = {"text": text}
+    def forward(self, query: str, top_n: int = 5, extra_arguments: dict = {}):
+        params = {"text": query}
         params.update(extra_arguments)
         raw_response = requests.post(
             f"{settings.squad_api_base_url}/data/x/search",
@@ -44,16 +50,21 @@ class XSearcher(Tool):
         )
         tweets = raw_response.json()
         if tweets:
-            response = ["Here are some tweets that may be of relevance:"]
             tweets = [Tweet.from_index(item) for item in raw_response.json()]
+            singular_items = []
             for tweet in tweets:
-                tweet_str = "\n".join(
-                    [f"{key}: {value}" for key, value in tweet.model_dump().items()]
+                singular_items.append(
+                    "\n".join(
+                        [f"{key}: {value}" for key, value in tweet.model_dump().items()]
+                        + [f"URL: https://x.com/i/status/{tweet.id}"]
+                    )
                 )
-                response.append(tweet_str)
-                response.append(f"URL: https://x.com/i/status/{tweet.id}")
-                response.append("---")
-            return "\n".join(response)
+            return_docs = (
+                rerank(query, singular_items, top_n=top_n, auth=settings.authorization)
+                if top_n
+                else singular_items[:top_n]
+            )
+            return "\n---\n".join(return_docs)
 
 
 class XTweeter(Tool):

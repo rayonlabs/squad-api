@@ -44,6 +44,7 @@ google-cloud-storage = "^2.19.0"
 smolagents = {extras = ["openai"], version = "^1.5.1"}
 kubernetes = "^32.0.0"
 aiomcache = "^0.8.2"
+transformers = "^4.48.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.5"

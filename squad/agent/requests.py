@@ -28,6 +28,10 @@ class AgentArgs(BaseModel):
         settings.default_text_gen_model,
         description="The primary LLM to power the agent with.",
     )
+    context_size: Optional[int] = Field(
+        core_settings.default_context_size,
+        description="Maximum context size (in tokens) of the primary agent LLM.",
+    )
     default_max_steps: Optional[int] = Field(
         core_settings.default_max_steps,
         description="Default maximum number of steps before your agent terminates.",

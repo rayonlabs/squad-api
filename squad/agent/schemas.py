@@ -44,6 +44,9 @@ class Agent(Base):
     sys_api_prompt = Column(String, nullable=True)
     sys_schedule_prompt = Column(String, nullable=True)
 
+    # Context size limits.
+    context_size = Column(Integer, nullable=False, default=settings.default_context_size)
+
     # X stuff.
     x_user_id = Column(String, nullable=True)
     x_username = Column(String, nullable=True)
@@ -85,6 +88,7 @@ class Agent(Base):
         config_map = {
             "system_prompt": self.sys_base_prompt or DEFAULT_SYSTEM_PROMPT,
             "agent_model": self.model,
+            "context_size": self.context_size or settings.default_context_size,
             "agent_callbacks": [],
             "task": task,
             "tools": {},

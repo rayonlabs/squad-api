@@ -23,7 +23,7 @@ from squad.storage.base import (
 class Tweet(BaseModel):
     id: int
     user_id: int
-    username: str
+    username: Optional[str] = None
     timestamp: datetime
     quote_count: Optional[int] = 0
     retweet_count: Optional[int] = 0
@@ -38,7 +38,7 @@ class Tweet(BaseModel):
     def from_index(doc):
         return Tweet(
             id=int(doc["id_num"]),
-            username=doc["username_term"],
+            username=doc.get("username_term"),
             user_id=int(doc["user_id_term"]),
             user_followers=int(doc.get("user_followers_num", 0)),
             timestamp=datetime.fromisoformat(doc["created_date"]),
@@ -48,7 +48,7 @@ class Tweet(BaseModel):
             favorite_count=int(doc.get("favorite_count_num", 0)),
             text=doc["default_text"],
             language=doc.get("language", "english"),
-            attachments=doc.get("attachments", {}),
+            attachments=doc.get("attachments", []),
         )
 
 

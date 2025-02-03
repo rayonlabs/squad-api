@@ -9,6 +9,8 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 from markdownify import markdownify
 from smolagents import Tool
+from squad.util import rerank
+from squad.agent_config import settings
 from squad.data.schemas import BraveSearchParams
 
 
@@ -189,6 +191,11 @@ class WebSearcher(Tool):
             "type": "string",
             "description": "Search query string to use when performing the search.",
         },
+        "top_n": {
+            "type": "integer",
+            "nullable": True,
+            "description": "Use a reranking model to return only the top top_n results.",
+        },
         "filter_domains_csv": {
             "type": "string",
             "nullable": True,
@@ -207,7 +214,9 @@ class WebSearcher(Tool):
     }
     output_type = "string"
 
-    def forward(self, query: str, filter_domains_csv: str = None, extra_arguments: dict = {}):
+    def forward(
+        self, query: str, top_n: int = 5, filter_domains_csv: str = None, extra_arguments: dict = {}
+    ):
         query = re.sub(r"site:[^ ]\s*", "", query)
         if filter_domains_csv:
             query += " " + " ".join([f"site:{domain}" for domain in filter_domains_csv.split(",")])
@@ -225,15 +234,16 @@ class WebSearcher(Tool):
         search_results = raw_result["web"]["results"]
         summary_keys = [
             "title",
-            "url",
             "description",
+            "extra_snippets",
+            "url",
             "age",
             "page_age",
             "subtype",
-            "extra_snippets",
         ]
-        summary = []
+        singular_results = []
         for item in search_results:
+            summary = []
             summary_data = {
                 key: value if isinstance(value, str) else "\n".join(value)
                 for key, value in item.items()
@@ -250,5 +260,7 @@ class WebSearcher(Tool):
                 summary.append(
                     f"video: {item['video'].get('duration', 'unknown duration')} thumbnail: {item['video']['thumbnail']['original']}"
                 )
-            summary.append("---")
-        return "\n".join(summary)
+            singular_results.append("\n".join(summary))
+        if top_n is not None and singular_results:
+            return rerank(query, singular_results, top_n=top_n, auth=settings.authorization)
+        return "\n---\n".join(singular_results[: top_n or 5])

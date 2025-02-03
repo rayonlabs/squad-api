@@ -1,5 +1,6 @@
 import uuid
 import asyncio
+import traceback
 import squad.database.orms  # noqa
 from loguru import logger
 from sqlalchemy import select
@@ -28,7 +29,6 @@ async def update_index():
         for agent in agents:
             # NOTE duplicates don't matter here since the X module skips
             # requests with the same params in short time spans.
-            auth = "Bearer " + generate_auth_token(agent.user_id, duration_minutes=30)
             for search in agent.x_searches or []:
                 search_key = "x:searchfail:" + str(
                     uuid.uuid5(uuid.NAMESPACE_OID, f"{agent.agent_id}:{search}")
@@ -49,9 +49,15 @@ async def update_index():
                 search_key = "x:searchfail:" + str(
                     uuid.uuid5(uuid.NAMESPACE_OID, f"{agent.agent_id}:{search}")
                 )
+                auth = "Bearer " + generate_auth_token(
+                    settings.default_user_id, duration_minutes=30
+                )
                 try:
                     indexed = await find_and_index_tweets(search, auth)
-                except Exception:
+                except Exception as exc:
+                    logger.warning(
+                        f"Failed performing search: {search}\nException was: {exc}\n{traceback.format_exc()}"
+                    )
                     await settings.redis_client.incr(search_key)
                 incr_by = indexed
                 while await rate_limit(

@@ -139,6 +139,9 @@ class Settings(BaseSettings):
         base_url=os.getenv("CHUTES_API_URL", "https://api.chutes.ai"),
     )
 
+    # Context size limits.
+    default_context_size: int = int(os.getenv("DEFAULT_CONTEXT_SIZE", "128000"))
+
     # X OAuth2 stuff.
     x_client_id: Optional[str] = os.getenv("X_CLIENT_ID")
     x_client_secret: Optional[str] = os.getenv("X_CLIENT_SECRET")

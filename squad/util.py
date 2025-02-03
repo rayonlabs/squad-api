@@ -6,6 +6,9 @@ import hashlib
 import time
 import secrets
 import datetime
+import transformers
+import requests
+import traceback
 from functools import lru_cache
 from loguru import logger
 from contextlib import asynccontextmanager
@@ -25,6 +28,7 @@ NSFW_SM = SessionManager(
 HATE_SM = SessionManager(
     base_url="https://chutes-hate-speech-detector.chutes.ai",
 )
+TOKENIZER = transformers.AutoTokenizer.from_pretrained("BAAI/bge-reranker-large")
 
 
 @lru_cache(maxsize=1)
@@ -165,6 +169,40 @@ async def contains_hate_speech(texts: list[str]):
     except Exception as exc:
         logger.warning(f"Error checking hate speech content: {exc}")
     return False
+
+
+async def rerank(query, texts: list[str], top_n: int = 3, auth: str = None):
+    """
+    Rerank the input documents based on the query to return only top_n results.
+    """
+    if not texts or len(texts) <= top_n:
+        return texts
+    rerank_docs = []
+    for item in texts:
+        tokens = TOKENIZER.encode(item)
+        if len(tokens) > 500:
+            tokens = tokens[:500]
+            rerank_docs.append(TOKENIZER.decode(tokens, skip_special_tokens=True))
+        else:
+            rerank_docs.append(item)
+    # Rerank.
+    try:
+        if not auth:
+            auth = get_chutes_token()
+        result = requests.post(
+            "https://chutes-baai-bge-reranker-large.chutes.ai/rerank",
+            json=dict(
+                query=query,
+                texts=rerank_docs,
+            ),
+            headers={"Authorization": auth},
+        )
+        ranks = result.json()
+        result.raise_for_status()
+        return "\n---\n".join([texts[ranks[idx]["index"]] for idx in range(min(top_n, len(texts)))])
+    except Exception as exc:
+        logger.warning(f"Error running rerank: {exc}\n{traceback.format_exc()}")
+    return texts[:top_n]
 
 
 async def contains_nsfw(media):
