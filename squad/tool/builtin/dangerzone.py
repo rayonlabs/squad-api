@@ -33,7 +33,7 @@ class DangerousDynamo(Tool):
             "https://llm.chutes.ai/v1/chat/completions",
             headers={"Authorization": settings.authorization},
             json={
-                "model": "deepseek-ai/DeepSeek-R1",
+                "model": "deepseek-ai/DeepSeek-V3",
                 "messages": [
                     {
                         "role": "user",

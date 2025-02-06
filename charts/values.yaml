@@ -3,7 +3,7 @@ agentConfig:
     models:
       image: FLUX.1-schnell
       vlm: OpenGVLab/InternVL2_5-78B
-      llm: deepseek-ai/DeepSeek-R1
+      llm: deepseek-ai/DeepSeek-V3
     params:
       tts:
         voice: af_sky
