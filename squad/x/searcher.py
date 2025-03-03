@@ -33,10 +33,17 @@ async def update_index():
                 search_key = "x:searchfail:" + str(
                     uuid.uuid5(uuid.NAMESPACE_OID, f"{agent.agent_id}:{search}")
                 )
-                bad_search = await settings.redis_client.get(search_key)
-                if bad_search:
-                    logger.warning(f"Skipping bad search: {search}")
-                    continue
+                fail_count = await settings.redis_client.get(search_key)
+                if fail_count:
+                    try:
+                        fail_count = int(fail_count)
+                    except ValueError:
+                        await settings.redis_client.delete(search_key)
+                        fail_count = 0
+                    if fail_count >= 3:
+                        logger.warning(f"Skipping bad search: {search} {fail_count=}")
+                        await settings.redis_client.expire(search_key, 600)
+                        continue
 
                 # Check if we should rate limit first (without incrementing)
                 while await rate_limit("x_search", SEARCH_LIMIT, FIFTEEN_MINUTES, incr_by=0):
@@ -49,6 +56,8 @@ async def update_index():
                 search_key = "x:searchfail:" + str(
                     uuid.uuid5(uuid.NAMESPACE_OID, f"{agent.agent_id}:{search}")
                 )
+
+                # Perform the actual search and index the tweets.
                 auth = "Bearer " + generate_auth_token(
                     settings.default_user_id, duration_minutes=30
                 )
@@ -59,6 +68,8 @@ async def update_index():
                         f"Failed performing search: {search}\nException was: {exc}\n{traceback.format_exc()}"
                     )
                     await settings.redis_client.incr(search_key)
+
+                # Update rate limit counters again...
                 incr_by = indexed
                 while await rate_limit(
                     "x_total_read", READ_LIMIT, FIFTEEN_MINUTES, incr_by=incr_by

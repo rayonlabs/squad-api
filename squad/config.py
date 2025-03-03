@@ -165,6 +165,16 @@ class Settings(BaseSettings):
     memory_index_replicas: int = int(os.getenv("MEMORY_INDEX_REPLICAS", "1"))
     memory_embed_weight: float = float(os.getenv("MEMORY_EMBED_WEIGHT", "0.5"))
 
+    # Account limits.
+    default_limit_max_steps: int = int(os.getenv("LIMIT_MAX_STEPS", "5"))
+    default_limit_max_execution_time: int = int(os.getenv("LIMIT_MAX_EXECUTION_TIME", "300"))
+    default_limit_max_invocations: int = int(os.getenv("LIMIT_MAX_INVOCATIONS", "48"))
+    default_limit_max_invocation_window: int = int(
+        os.getenv("LIMIT_MAX_INVOCATION_WINDOW", str(24 * 60 * 60))
+    )
+    default_limit_max_tools: int = int(os.getenv("LIMIT_MAX_TOOLS", "5"))
+    default_limit_max_agents: int = int(os.getenv("LIMIT_MAX_AGENTS", "1"))
+
     # Misc.
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
 

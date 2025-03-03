@@ -131,6 +131,15 @@ async def create_tool(
     db: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user()),
 ):
+    count = (
+        await db.execute(select(func.count()).select_from(Tool).where(Tool.user_id == user.user_id))
+    ).scalar_one()
+    if count >= user.limits.max_tools:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"You have reached or exceeded the maximum number of tools for your account tier: {count}",
+        )
+
     args.tool_args["tool_name"] = args.name
     if not args.tool_args.get("tool_description"):
         args.tool_args["tool_description"] = args.description

@@ -159,6 +159,10 @@ def create_invocation_job(mapper, connection, invocation):
                                 client.V1EnvVar(name="AGENT_ID", value=invocation.agent_id),
                                 client.V1EnvVar(name="SQUAD_API_BASE_URL", value="http://api:8000"),
                                 client.V1EnvVar(
+                                    name="EXECUTION_TIMEOUT",
+                                    value=f"{invocation.agent.max_execution_time}",
+                                ),
+                                client.V1EnvVar(
                                     name="HTTP_PROXY", value=agent_settings.execution_proxy
                                 ),
                                 client.V1EnvVar(
@@ -178,6 +182,7 @@ def create_invocation_job(mapper, connection, invocation):
                 ),
             ),
             backoff_limit=0,
+            active_deadline_seconds=invocation.agent.max_execution_time + 180,
             ttl_seconds_after_finished=180,
         ),
     )

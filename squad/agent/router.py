@@ -3,7 +3,7 @@ Router to handle agents.
 """
 
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 import orjson as json
 import pybase64 as base64
 from typing import Optional, Any, Annotated
@@ -154,6 +154,21 @@ async def create_agent(
 ):
     agent = None
     tool_ids = []
+    count = (
+        await db.execute(
+            select(func.count()).select_from(Agent).where(Agent.user_id == user.user_id)
+        )
+    ).scalar_one()
+    if count >= user.limits.max_agents:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"You have reached or exceeded the maximum number of agents for your account tier: {count}",
+        )
+    if args.default_max_steps >= user.limits.max_steps:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Your account is limited to {user.limits.max_steps} max steps per agent.",
+        )
     try:
         agent_args = args.model_dump()
         if not agent_args.get("name"):
@@ -256,6 +271,24 @@ async def invoke_agent(
 
     invocation_id = await get_unique_id()
     agent = await _load_agent(db, agent_id_or_name, user.user_id)
+
+    # Rate limits.
+    count = (
+        await db.execute(
+            select(func.count())
+            .select_from(Invocation)
+            .where(
+                Invocation.agent_id == agent.agent_id,
+                Invocation.created_at
+                >= func.now() - timedelta(seconds=user.limits.max_invocations_window),
+            )
+        )
+    ).scalar_one()
+    if count >= user.limits.max_invocations:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Your agent has exceeded the rate limit for the current tier: {user.limits.max_invocations} per {user.limits.max_invocations_window} seconds",
+        )
 
     # Upload all input files to the storage bucket.
     input_paths = []

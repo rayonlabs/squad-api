@@ -35,6 +35,7 @@ class Agent(Base):
     model = Column(String, nullable=False)
     user_id = Column(String, nullable=True)
     default_max_steps = Column(Integer, nullable=False, default=settings.default_max_steps)
+    max_execution_time = Column(Integer, nullable=False)
     public = Column(Boolean, default=True)
     include_trace = Column(Boolean, default=True)
 
