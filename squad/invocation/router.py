@@ -265,23 +265,19 @@ async def upload_file(
         )
 
     output_paths = []
-    tasks = []
     dt = invocation.created_at
     base_path = f"invocations/{dt.year}/{dt.month}/{dt.day}/{invocation_id}/outputs/"
-    async with settings.s3_client() as s3:
-        for file in files:
-            logger.info(f"Attempting to upload output file to blob store: {file.filename}")
-            content = await file.read()
-            destination = f"{base_path}{file.filename}"
-            output_paths.append(destination)
-            tasks.append(
-                s3.upload_fileobj(
-                    io.BytesIO(content),
-                    settings.storage_bucket,
-                    destination,
-                )
+    for file in files:
+        logger.info(f"Attempting to upload output file to blob store: {file.filename}")
+        content = await file.read()
+        destination = f"{base_path}{file.filename}"
+        output_paths.append(destination)
+        async with settings.s3_client() as s3:
+            await s3.upload_fileobj(
+                io.BytesIO(content),
+                settings.storage_bucket,
+                destination,
             )
-        await asyncio.gather(*tasks)
     invocation.outputs = output_paths
     await db.commit()
     await db.refresh(invocation)

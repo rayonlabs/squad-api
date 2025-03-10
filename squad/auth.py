@@ -11,7 +11,6 @@ from fastapi import Request, HTTPException, status, Header
 from datetime import datetime, timedelta
 from squad.database import get_session
 from squad.config import settings
-from squad.agent.schemas import Agent
 
 
 def generate_auth_token(user_id, duration_minutes=30, issuer: str = "squad", **extra_payload):
@@ -77,6 +76,8 @@ def get_current_user(
 
 
 def get_current_agent(issuer: str = "squad", scopes: list[str] = None):
+    from squad.agent.schemas import Agent
+
     async def _authenticate(
         request: Request,
         authorization: str | None = Header(None, alias="Authorization"),

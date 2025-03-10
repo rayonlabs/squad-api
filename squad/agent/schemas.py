@@ -4,7 +4,7 @@ ORM definitions/methods for agents.
 
 import re
 from async_lru import alru_cache
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from sqlalchemy import (
     select,
@@ -24,6 +24,16 @@ from squad.tool.prompts import DEFAULT_SYSTEM_PROMPT, DEFAULT_X_ADDENDUM
 from squad.database import Base, generate_uuid, get_session
 from squad.agent_tool.schemas import agent_tools
 from squad.agent.templates import DEFAULT_IMPORTS, MAIN_TEMPLATE
+
+
+def is_valid_name(name):
+    if (
+        not isinstance(name, str)
+        or not re.match(r"^(?:([a-zA-Z0-9_\.-]+)/)*([a-z0-9][a-z0-9_\.\/-]*)$", name, re.I)
+        or len(name) >= 64
+    ):
+        return False
+    return True
 
 
 class Agent(Base):
@@ -69,7 +79,14 @@ class Agent(Base):
 
     __table_args__ = (
         Index("unique_x_user", "x_username", unique=True, postgresql_where=(x_username != None)),  # noqa
+        Index("unique_name", "name", unique=True),  # noqa
     )
+
+    @validates("name")
+    def validate_name(self, _, name):
+        if not is_valid_name(name):
+            raise ValueError(f"Invalid agent name: {name}")
+        return name
 
     def as_executable(
         self, task: str, max_steps: int = None, source: str = "api", input_files: list[str] = None
@@ -86,7 +103,8 @@ class Agent(Base):
                 + ["\n", task]
             )
         config_map = {
-            "system_prompt": self.sys_base_prompt or DEFAULT_SYSTEM_PROMPT,
+            "system_prompt": DEFAULT_SYSTEM_PROMPT
+            + ("\n" + self.sys_base_prompt if self.sys_base_prompt else ""),
             "agent_model": self.model,
             "context_size": self.context_size or settings.default_context_size,
             "agent_callbacks": [],
