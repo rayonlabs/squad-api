@@ -173,7 +173,7 @@ async def execute(invocation_id):
                     decoded_line = line.decode().strip()
                     log_method(decoded_line)
                     outfile.write(decoded_line + "\n")
-                    await _ship_log(invocation_id, decoded_line)
+                    asyncio.create_task(_ship_log(invocation_id, decoded_line))
                 else:
                     logger.info(f"Done logging: {name}")
                     break

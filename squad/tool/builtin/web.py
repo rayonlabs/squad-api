@@ -1,6 +1,7 @@
 import os
 import io
 import re
+import asyncio
 import requests
 import tempfile
 from contextlib import contextmanager
@@ -262,5 +263,8 @@ class WebSearcher(Tool):
                 )
             singular_results.append("\n".join(summary))
         if top_n is not None and singular_results:
-            return rerank(query, singular_results, top_n=top_n, auth=settings.authorization)
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(
+                rerank(query, singular_results, top_n=top_n, auth=settings.authorization)
+            )
         return "\n---\n".join(singular_results[: top_n or 5])

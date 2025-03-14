@@ -4,6 +4,7 @@ X/twitter tools.
 
 import os
 import requests
+import asyncio
 from smolagents import Tool
 from squad.util import rerank
 from squad.data.schemas import XSearchParams
@@ -59,11 +60,12 @@ class XSearcher(Tool):
                         + [f"URL: https://x.com/i/status/{tweet.id}"]
                     )
                 )
-            return_docs = (
-                rerank(query, singular_items, top_n=top_n, auth=settings.authorization)
-                if top_n
-                else singular_items[:top_n]
-            )
+            return_docs = singular_items
+            if top_n:
+                loop = asyncio.get_event_loop()
+                return_docs = loop.run_until_complete(
+                    rerank(query, singular_items, top_n=top_n, auth=settings.authorization)
+                )
             return "\n---\n".join(return_docs)
 
 

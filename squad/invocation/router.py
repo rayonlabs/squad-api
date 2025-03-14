@@ -9,7 +9,7 @@ import traceback
 from loguru import logger
 from pathlib import Path
 from typing import Optional, Any, Annotated
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import (
     APIRouter,
@@ -278,7 +278,10 @@ async def upload_file(
                 settings.storage_bucket,
                 destination,
             )
-    invocation.outputs = output_paths
+    update_stmt = text(
+        "UPDATE invocations SET outputs = array_cat(outputs, :new_outputs) WHERE invocation_id = :invocation_id"
+    )
+    await db.execute(update_stmt, {"invocation_id": invocation_id, "new_outputs": output_paths})
     await db.commit()
     await db.refresh(invocation)
     return output_paths

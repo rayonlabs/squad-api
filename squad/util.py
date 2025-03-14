@@ -180,8 +180,8 @@ async def rerank(query, texts: list[str], top_n: int = 3, auth: str = None):
     rerank_docs = []
     for item in texts:
         tokens = TOKENIZER.encode(item)
-        if len(tokens) > 500:
-            tokens = tokens[:500]
+        if len(tokens) > 475:
+            tokens = tokens[:475]
             rerank_docs.append(TOKENIZER.decode(tokens, skip_special_tokens=True))
         else:
             rerank_docs.append(item)
@@ -199,7 +199,7 @@ async def rerank(query, texts: list[str], top_n: int = 3, auth: str = None):
         )
         ranks = result.json()
         result.raise_for_status()
-        return "\n---\n".join([texts[ranks[idx]["index"]] for idx in range(min(top_n, len(texts)))])
+        return "\n---\n".join([texts[ranks[idx]["index"]] for idx in range(min(top_n, len(ranks)))])
     except Exception as exc:
         logger.warning(f"Error running rerank: {exc}\n{traceback.format_exc()}")
     return texts[:top_n]
