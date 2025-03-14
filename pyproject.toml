@@ -38,7 +38,7 @@ markdownify = "^0.14.1"
 playwright = "^1.49.1"
 beautifulsoup4 = "^4.12.3"
 cryptography = "^44.0.0"
-aioboto3 = "^13.4.0"
+aioboto3 = "14.1.0"
 python-multipart = "^0.0.20"
 google-cloud-storage = "^2.19.0"
 smolagents = {extras = ["openai"], version = "^1.5.1"}

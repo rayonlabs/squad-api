@@ -97,7 +97,10 @@ class Settings(BaseSettings):
         async with session.client(
             "s3",
             endpoint_url=self.aws_endpoint_url,
-            config=Config(signature_version="s3v4"),
+            config=Config(
+                signature_version="s3v4",
+                s3={"use_accelerate_endpoint": False, "addressing_style": "path"},
+            ),
         ) as client:
             yield client
 

@@ -46,20 +46,22 @@ def image_tool(
 
         def forward(self, prompt: str) -> str:
             nonlocal model, height, width, num_inference_steps, guidance_scale, seed, kwargs
+            request_body = {
+                **{
+                    "model": model,
+                    "prompt": prompt,
+                    "width": width,
+                    "height": height,
+                    "num_inference_steps": num_inference_steps,
+                    "guidance_scale": guidance_scale,
+                    "seed": seed,
+                },
+                **kwargs,
+            }
+            request_body = {k: v for k, v in request_body.items() if v is not None}
             result = requests.post(
                 "https://image.chutes.ai/generate",
-                json={
-                    **{
-                        "model": model,
-                        "prompt": prompt,
-                        "width": width,
-                        "height": height,
-                        "num_inference_steps": num_inference_steps,
-                        "guidance_scale": guidance_scale,
-                        "seed": seed,
-                    },
-                    **kwargs,
-                },
+                json=request_body,
                 headers={
                     "Authorization": settings.authorization,
                 },
