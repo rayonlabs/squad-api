@@ -88,6 +88,10 @@ class Agent(Base):
             raise ValueError(f"Invalid agent name: {name}")
         return name
 
+    @property
+    def x_connected(self):
+        return self.x_token_expires_at is not None
+
     def as_executable(
         self, task: str, max_steps: int = None, source: str = "api", input_files: list[str] = None
     ):
@@ -160,6 +164,7 @@ class Agent(Base):
                     config_map["agent_callbacks"].append("wipe_tool_creation_step")
                 if isinstance(ref, type) and issubclass(ref, STool):
                     code.append(f"{tool.name} = {tool.template}()")
+                    tool_names.append(tool.name)
                 else:
                     config_map["tools"][tool.name] = tool.tool_args
                     code.append(
