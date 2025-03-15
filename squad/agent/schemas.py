@@ -191,3 +191,12 @@ async def get_by_x(x_username: str | int, runtime: float = 0.0):
     query = select(Agent).where(Agent.x_username.ilike(x_username))
     async with get_session() as session:
         return (await session.execute(query)).unique().scalar_one_or_none()
+
+
+async def get_by_id(agent_id: str):
+    async with get_session() as session:
+        return (
+            (await session.execute(select(Agent).where(Agent.agent_id == agent_id)))
+            .unique()
+            .scalar_one_or_none()
+        )

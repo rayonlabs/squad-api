@@ -75,7 +75,7 @@ def memory_searcher(
                     "X-Agent-ID": settings.agent_id,
                 },
             )
-            memories = [Memory.from_index(item) for item in raw_response.json()]
+            memories = [Memory(**item) for item in raw_response.json()]
             response = []
             for memory in memories:
                 display = []

@@ -51,7 +51,7 @@ class XSearcher(Tool):
         )
         tweets = raw_response.json()
         if tweets:
-            tweets = [Tweet.from_index(item) for item in raw_response.json()]
+            tweets = [Tweet(**item) for item in raw_response.json()]
             singular_items = []
             for tweet in tweets:
                 singular_items.append(

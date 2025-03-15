@@ -80,9 +80,9 @@ class Memory(BaseModel):
         description="Arbitrary key/value metadata (not searchable).",
     )
     language: Optional[str] = Field(
-        None,
+        "english",
         title="Language",
-        description="Language, auto-detected if not specified.",
+        description="Language, defaults to english, set to 'auto' to autodetect.",
         enum=SUPPORTED_LANGUAGES,
     )
     text: str = Field(
@@ -106,7 +106,7 @@ class Memory(BaseModel):
         """
         Return the memory as an indexable document, with embeddings.
         """
-        if not self.language:
+        if self.language == "auto":
             self.language = detect_language(self.text)
         return {
             "uid_term": self.uid,
@@ -117,7 +117,7 @@ class Memory(BaseModel):
             "language_term": self.language,
             f"memory_text_{self.language}": self.text,
             "memory_date": self.timestamp.replace(tzinfo=None).isoformat().rstrip("Z"),
-            "created_from_text_{self.language}": self.created_from,
+            f"created_from_text_{self.language}": self.created_from,
             "embeddings": await generate_embeddings(self.text, api_key),
         }
 
@@ -182,8 +182,8 @@ async def search(
     query = {}
 
     # Detect the language first, so we can use the best field regardless of other params.
-    if not language:
-        language = "english" if not text else (detect_language(text) or "english")
+    if language == "auto" and text:
+        language = detect_language(text)
 
     # Hard filters (usernames and date ranges).
     filters = [{"term": {"agent_id_term": agent_id}}]
@@ -305,7 +305,7 @@ async def delete(agent_id: str, memory_id: str) -> dict:
                     "must": [
                         {
                             "term": {
-                                "agent_id": agent_id,
+                                "agent_id_term": agent_id,
                             },
                         },
                         {

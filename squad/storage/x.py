@@ -36,6 +36,9 @@ class Tweet(BaseModel):
 
     @staticmethod
     def from_index(doc):
+        attachments = doc.get("attachments")
+        if not attachments or not isinstance(attachments, list):
+            attachments = []
         return Tweet(
             id=int(doc["id_num"]),
             username=doc.get("username_term"),
@@ -48,7 +51,7 @@ class Tweet(BaseModel):
             favorite_count=int(doc.get("favorite_count_num", 0)),
             text=doc["default_text"],
             language=doc.get("language", "english"),
-            attachments=doc.get("attachments", []),
+            attachments=attachments,
         )
 
 
