@@ -60,6 +60,7 @@ async def perform_brave_search(
     if not search.count:
         search.count = 5
     params = search.dict()
+    params = {k: v if isinstance(v, str) else str(v) for k, v in params.items() if v is not None}
     async with settings.brave_sm.get_session() as session:
         async with session.get("/res/v1/web/search", params=params) as resp:
             return await resp.json()

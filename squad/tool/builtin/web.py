@@ -1,4 +1,3 @@
-import os
 import io
 import re
 import asyncio
@@ -223,10 +222,12 @@ class WebSearcher(Tool):
             query += " " + " ".join([f"site:{domain}" for domain in filter_domains_csv.split(",")])
         params = {"q": query}
         params.update(extra_arguments)
-        result = requests.get(
-            "https://api.search.brave.com/res/v1/web/search",
-            params=params,
-            headers={"x-subscription-token": os.getenv("BRAVE_API_TOKEN")},
+        result = requests.post(
+            f"{settings.squad_api_base_url}/data/brave/search",
+            json=params,
+            headers={
+                "Authorization": settings.authorization,
+            },
         )
         result.raise_for_status()
         raw_result = result.json()

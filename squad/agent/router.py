@@ -264,13 +264,17 @@ async def invoke_agent(
 ):
     task = None
     files_b64 = None
+    public = None
     if request.headers.get("content-type") == "application/json":
         body = await request.json()
         task = body.get("task")
         files_b64 = body.get("files_b64")
+        public = body.get("public")
     else:
         form = await request.form()
         task = form.get("task")
+        public = form.get("public")
+    public = str(public).lower() not in ("false", "0")
     if not task:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -316,6 +320,7 @@ async def invoke_agent(
         user_id=user.user_id,
         task=task,
         inputs=input_paths,
+        public=public,
     )
     db.add(invocation)
     await db.commit()
