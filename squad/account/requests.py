@@ -2,6 +2,7 @@
 Account-related pydantic models.
 """
 
+from typing import Optional
 from pydantic import BaseModel, Field
 from squad.config import settings
 from squad.agent_config import settings as agent_settings
@@ -20,4 +21,7 @@ class AccountLimitRequest(BaseModel):
     max_tools: int = Field(settings.default_limit_max_tools, ge=1)
     max_agents: int = Field(settings.default_limit_max_agents, ge=1)
     max_agent_tools: int = Field(settings.default_limit_agent_tools, ge=1)
+    allow_private_agents: Optional[bool] = False
+    allow_private_tools: Optional[bool] = False
+    allow_private_invocations: Optional[bool] = True
     allowed_models: list[str] = Field([agent_settings.default_text_gen_model])

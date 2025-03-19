@@ -166,12 +166,6 @@ async def create_agent(
     db: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user()),
 ):
-    if not user.limits:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="You must register through the squad website before you can use the platform.",
-        )
-
     agent = None
     tool_ids = []
     count = (

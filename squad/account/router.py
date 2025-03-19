@@ -16,8 +16,8 @@ router = APIRouter()
 
 def limit_access(user):
     if user.user_id not in (
-        "8930c58d-00f6-57d3-bc62-156eb8b73026",
         "dff3e6bb-3a6b-5a2b-9c48-da3abcd5ca5f",
+        "b6bb1347-6ea5-556f-8b23-50b124f3ffc8",
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
