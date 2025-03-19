@@ -9,6 +9,7 @@ from sqlalchemy import (
 )
 from squad.config import settings
 from squad.database import Base
+from sqlalchemy.dialects.postgresql import ARRAY
 
 
 class AccountLimit(Base):
@@ -26,3 +27,5 @@ class AccountLimit(Base):
     )
     max_tools = Column(Integer, nullable=False, default=settings.default_limit_max_tools)
     max_agents = Column(Integer, nullable=False, default=settings.default_limit_max_agents)
+    max_agent_tools = Column(Integer, nullable=False, default=settings.default_limit_agent_tools)
+    allowed_models = Column(ARRAY(String), nullable=False)

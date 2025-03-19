@@ -16,6 +16,7 @@ import squad.database.orms  # noqa: F401
 from squad.agent.router import router as agent_router
 from squad.tool.router import router as tool_router
 from squad.data.router import router as data_router
+from squad.account.router import router as account_router
 from squad.invocation.router import router as invocation_router
 from squad.x.router import router as x_router
 from squad.database import Base, engine
@@ -113,6 +114,7 @@ app = FastAPI(default_response_class=ORJSONResponse, lifespan=lifespan)
 app.include_router(agent_router, prefix="/agents", tags=["Agents"])
 app.include_router(tool_router, prefix="/tools", tags=["Tools"])
 app.include_router(data_router, prefix="/data", tags=["Data"])
+app.include_router(account_router, prefix="/accounts", data=["Account"])
 app.include_router(invocation_router, prefix="/invocations", tags=["Invocation"])
 app.include_router(x_router, prefix="/x", tags=["X"])
 

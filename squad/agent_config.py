@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     default_vlm_model: str = os.getenv(
         "DEFAULT_VLM_MODEL", "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
     )
-    default_text_gen_model: str = os.getenv("DEFAULT_TEXT_GEN_MODEL", "deepseek-ai/DeepSeek-R1")
+    default_text_gen_model: str = os.getenv(
+        "DEFAULT_TEXT_GEN_MODEL", "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
+    )
     default_tts_voice: str = os.getenv("DEFAULT_TTS_VOICE", "af_sky")
     default_tts_slug: str = os.getenv("DEFAULT_TTS_SLUG", "chutes-kokoro-82m")
     squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://127.0.0.1:8000")

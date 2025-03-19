@@ -166,6 +166,12 @@ async def create_agent(
     db: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user()),
 ):
+    if not user.limits:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="You must register through the squad website before you can use the platform.",
+        )
+
     agent = None
     tool_ids = []
     count = (
@@ -196,6 +202,13 @@ async def create_agent(
             detail=str(exc),
         )
 
+    # Check the model.
+    if "ANY" not in user.limits.allowed_models and agent.model not in user.limits.allowed_models:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Your account is limited to the following models: {user.limits.allowed_models}",
+        )
+
     # Check name uniqueness.
     query = select(exists().where(Agent.name.ilike(agent.name)))
     agent_exists = await db.scalar(query)
@@ -208,7 +221,11 @@ async def create_agent(
     # Add the tools.
     if tool_ids:
         agent.tools = await _load_tools(db, tool_ids, user.user_id)
-
+        if len(agent.tools) > user.limits.max_agent_tools:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Your account is limited to {user.limits.max_agent_tools} max tools per agent.",
+            )
     await populate_x_account(db, agent)
     db.add(agent)
     await db.commit()
