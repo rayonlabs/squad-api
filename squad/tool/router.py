@@ -143,6 +143,12 @@ async def create_tool(
     args.tool_args["tool_name"] = args.name
     if not args.tool_args.get("tool_description"):
         args.tool_args["tool_description"] = args.description
+    if args.template is None and not user.limits.allow_custom_tools:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="You need a higher service tier to use custom code",
+        )
+
     validator = ToolValidator(db, args, user)
     await validator.validate()
     tool = None

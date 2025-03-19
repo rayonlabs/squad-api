@@ -57,13 +57,17 @@ async def list_invocations(
     search: Optional[str] = None,
     limit: Optional[int] = 10,
     page: Optional[int] = 0,
+    user_id: Optional[str] = None,
     user: Any = Depends(get_current_user(raise_not_found=False)),
+    mine: Optional[bool] = False,
 ):
-    user_id = user.user_id if user else None
+    current_user_id = user.user_id if user else None
     query = select(Invocation)
     if include_public:
         if user:
-            query = query.where(or_(Invocation.user_id == user_id, Invocation.public.is_(True)))
+            query = query.where(
+                or_(Invocation.user_id == current_user_id, Invocation.public.is_(True))
+            )
         else:
             query = query.where(Invocation.public.is_(True))
     elif not user:
@@ -72,7 +76,7 @@ async def list_invocations(
             detail="You must authenticate to see your own private invocations.",
         )
     else:
-        query = query.where(Invocation.user_id == user_id)
+        query = query.where(Invocation.user_id == current_user_id)
     if agent_id:
         query = query.where(Invocation.agent_id == agent_id)
     if agent_name:
@@ -81,6 +85,10 @@ async def list_invocations(
         )
     if search:
         query = query.where(Invocation.task.ilike(f"%{search}%"))
+    if user_id:
+        query = query.where(Invocation.user_id == user_id)
+    if mine and user:
+        query = query.where(Invocation.user_id == user.user_id)
 
     # Perform a count.
     total_query = select(func.count()).select_from(query.subquery())
@@ -206,10 +214,15 @@ async def stream_invocation(
                 last_offset = offset.decode()
                 parts = last_offset.split("-")
                 last_offset = parts[0] + "-" + str(int(parts[1]) + 1)
+                try:
+                    log_data = json.loads(data[b"data"])
+                    if log_data["log"] == "DONE":
+                        return
+                except Exception:
+                    ...
                 if b'"log":"DONE"' in data[b"data"]:
                     await settings.redis_client.delete(invocation.stream_key)
-                    yield "DONE\n"
-                    break
+                    return
                 yield f"data: {data[b'data'].decode()}\n\n"
 
     return StreamingResponse(_stream())

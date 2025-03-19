@@ -20,6 +20,7 @@ from squad.agent.requests import AgentArgs
 from squad.agent.response import AgentResponse
 from squad.tool.schemas import Tool
 from squad.invocation.schemas import Invocation, get_unique_id
+from squad.invocation.router import PaginatedInvocations, list_invocations
 from squad.storage.x import get_users, get_users_by_id
 
 router = APIRouter()
@@ -197,7 +198,7 @@ async def create_agent(
         )
 
     # Check the model.
-    if "ANY" not in user.limits.allowed_models and agent.model not in user.limits.allowed_models:
+    if "all" not in user.limits.allowed_models and agent.model not in user.limits.allowed_models:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=f"Your account is limited to the following models: {user.limits.allowed_models}",
@@ -374,3 +375,34 @@ async def invoke_agent(
         {"data": json.dumps({"log": "Queued agent call.", "timestamp": now_str()}).decode()},
     )
     return {"invocation_id": invocation_id}
+
+
+@router.get("/{agent_id_or_name}/invocations", response_model=PaginatedInvocations)
+async def agent_list_invocations(
+    db: AsyncSession = Depends(get_db_session),
+    agent_id_or_name: Optional[str] = None,
+    include_public: Optional[bool] = False,
+    search: Optional[str] = None,
+    limit: Optional[int] = 10,
+    page: Optional[int] = 0,
+    user_id: Optional[str] = None,
+    user: Any = Depends(get_current_user(raise_not_found=False)),
+    mine: Optional[bool] = False,
+):
+    agent = await _load_agent(db, agent_id_or_name, user.user_id if user else None)
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent {agent_id_or_name} not found, or does not belong to you.",
+        )
+    return await list_invocations(
+        db,
+        agent_id=agent.agent_id,
+        include_public=include_public,
+        search=search,
+        limit=limit,
+        page=page,
+        user_id=user_id,
+        user=user,
+        mine=mine,
+    )

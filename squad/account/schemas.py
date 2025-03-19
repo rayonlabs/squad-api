@@ -34,4 +34,5 @@ class AccountLimit(Base):
     allow_private_agents = Column(Boolean, nullable=False, default=False)
     allow_private_tools = Column(Boolean, nullable=False, default=False)
     allow_private_invocations = Column(Boolean, nullable=False, default=True)
+    allow_custom_tools = Column(Boolean, nullable=False, default=False)
     allowed_models = Column(ARRAY(String), nullable=False, default=settings.default_allowed_models)

@@ -46,10 +46,13 @@ async def set_account_limits(
     limit_access(user)
     query = select(AccountLimit).where(AccountLimit.user_id == user_id)
     limit = (await db.execute(query)).unique().scalar_one_or_none()
-    await db.delete(limit)
-    limit = AccountLimit(**new_limits.model_dump())
+    if limit:
+        await db.delete(limit)
+    args = new_limits.model_dump()
+    args["user_id"] = user_id
+    limit = AccountLimit(**args)
     db.add(limit)
-    await db.comit()
+    await db.commit()
     await db.refresh(limit)
     return limit
 
