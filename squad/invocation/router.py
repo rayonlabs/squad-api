@@ -25,6 +25,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from squad.auth import get_current_user, get_current_agent
 from squad.util import now_str
+from squad.agent.schemas import Agent
 from squad.config import settings
 from squad.database import get_db_session
 from squad.pagination import PaginatedResponse
@@ -51,6 +52,7 @@ async def _load_invocation(db, invocation_id, user_id):
 async def list_invocations(
     db: AsyncSession = Depends(get_db_session),
     agent_id: Optional[str] = None,
+    agent_name: Optional[str] = None,
     include_public: Optional[bool] = False,
     search: Optional[str] = None,
     limit: Optional[int] = 10,
@@ -73,6 +75,12 @@ async def list_invocations(
         query = query.where(Invocation.user_id == user_id)
     if agent_id:
         query = query.where(Invocation.agent_id == agent_id)
+    if agent_name:
+        query = query.join(Agent, Invocation.agent_id == Agent.agent_id).where(
+            Agent.name.ilike(agent_name)
+        )
+    if search:
+        query = query.where(Invocation.task.ilike(f"%{search}%"))
 
     # Perform a count.
     total_query = select(func.count()).select_from(query.subquery())

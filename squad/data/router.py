@@ -9,6 +9,8 @@ from squad.auth import get_current_user, get_current_agent
 from squad.agent.schemas import get_by_id
 from squad.config import settings
 from squad.data.schemas import (
+    DataUniverseSearchParams,
+    ApexWebSearchParams,
     BraveSearchParams,
     XSearchParams,
     MemorySearchParams,
@@ -79,6 +81,32 @@ async def perform_x_search(
     params["api_key"] = authorization
     tweets, _ = await x_search(**params)
     return tweets
+
+
+@router.post("/data_universe/search")
+async def perform_data_universe_search(
+    search: DataUniverseSearchParams,
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+):
+    await get_current_agent(issuer="squad")(request, authorization)
+    async with settings.data_universe_sm() as session:
+        async with session.post(
+            "/api/v1/on_demand_data_request_test", json=search.model_dump()
+        ) as resp:
+            return await resp.json()
+
+
+@router.post("/apex/web_search")
+async def perform_apx_web_search(
+    search: ApexWebSearchParams,
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+):
+    await get_current_agent(issuer="squad")(request, authorization)
+    async with settings.apex_search_sm() as session:
+        async with session.post("/web_retrieval", json=search.model_dump()) as resp:
+            return await resp.json()
 
 
 @router.post("/memory/search")

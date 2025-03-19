@@ -1,6 +1,6 @@
 # Base layer.
 FROM python:3.12.8 AS base
-RUN apt update && apt -y install vim jq bc net-tools curl wget
+RUN apt update && apt -y install vim jq bc net-tools curl wget pkg-config libgraphviz-dev libcairo2-dev libpango1.0-dev libgdk-pixbuf2.0-dev
 RUN useradd squad -s /bin/bash -d /home/squad && mkdir -p /home/squad && chown squad:squad /home/squad
 RUN mkdir -p /app && chown squad:squad /app
 USER squad

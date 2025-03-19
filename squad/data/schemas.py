@@ -3,7 +3,7 @@ Pydantic models for storage requests (from agents).
 """
 
 from pydantic import BaseModel, Field, field_validator, model_validator, constr
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Literal
 from datetime import datetime
 from squad.storage.base import SUPPORTED_LANGUAGES
 
@@ -236,3 +236,31 @@ class MemorySearchParams(BaseSearchArgs):
         title="Source material summary",
         description="Brief summary of the source the memory was generated from.",
     )
+
+
+class DataUniverseSearchParams(BaseModel):
+    source: Literal["x", "reddit"] = Field(
+        description="Data source identifier, either 'x' or 'reddit'"
+    )
+    usernames: List[constr(min_length=3, max_length=64)] = Field(
+        default=[], min_items=0, max_items=5, description="List of usernames to search, 0-5 allowed"
+    )
+    keywords: List[constr(min_length=1, max_length=64)] = Field(
+        default=[], min_items=0, max_items=5, description="List of keywords to search, 0-5 allowed"
+    )
+    limit: int = Field(
+        default=100, ge=1, le=1000, description="Number of results to return, between 1-1000"
+    )
+    start_date: Optional[datetime] = Field(
+        default=None, description="Start date for the search in ISO format"
+    )
+    end_date: Optional[datetime] = Field(
+        default=None, description="End date for the search in ISO format", gt_field="start_date"
+    )
+
+
+class ApexSearchWebParams(BaseModel):
+    query: str = Field(description="Search query")
+    limit: int = Field(default=10, ge=1, le=50, description="Maximum number of results to return.")
+    miners: int = Field(default=5, ge=1, le=10, description="Number of unique miners to query.")
+    timeout: int = Field(default=10, ge=3, le=30, description="Maximum request timeout in seconds.")
