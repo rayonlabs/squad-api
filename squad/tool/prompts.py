@@ -1,9 +1,15 @@
+import yaml
+import importlib.resources
 from smolagents.tools import AUTHORIZED_TYPES
-from smolagents.agents import CODE_SYSTEM_PROMPT
 
 DEFAULT_X_ADDENDUM = """
 Your task is to take on the role of a twitter/X bot with username USERNAME and process or otherwise take some action in response to an incoming tweet/X post.
 """
+
+CODE_PROMPTS = yaml.safe_load(
+    importlib.resources.files("smolagents.prompts").joinpath("code_agent.yaml").read_text()
+)
+CODE_SYSTEM_PROMPT = CODE_PROMPTS["system_prompt"]
 
 DEFAULT_SYSTEM_PROMPT = f"""{CODE_SYSTEM_PROMPT}
 

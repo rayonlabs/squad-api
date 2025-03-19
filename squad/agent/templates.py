@@ -27,7 +27,7 @@ def _execution_step_logger(step):
     except Exception:
         ...
 agent = CodeAgent(
-    system_prompt=__tool_args["system_prompt"],
+    prompt_templates=__tool_args["prompt_templates"],
     additional_authorized_imports=[
         "PIL",
         "requests",
@@ -76,6 +76,7 @@ agent = CodeAgent(
         "pytesseract",
         "own",
         "markitdown",
+        "yt_dlp",
     ],
     step_callbacks=[_execution_step_logger] + __tool_args["agent_callbacks"],
     max_steps=__tool_args["max_steps"],

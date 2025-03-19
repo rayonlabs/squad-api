@@ -3,6 +3,7 @@ ORM definitions/methods for agents.
 """
 
 import re
+from copy import deepcopy
 from async_lru import alru_cache
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
@@ -20,7 +21,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from squad.config import settings
 import squad.tool.builtin as builtin
 from smolagents import Tool as STool
-from squad.tool.prompts import DEFAULT_SYSTEM_PROMPT, DEFAULT_X_ADDENDUM
+from squad.tool.prompts import CODE_PROMPTS, DEFAULT_SYSTEM_PROMPT, DEFAULT_X_ADDENDUM
 from squad.database import Base, generate_uuid, get_session
 from squad.agent_tool.schemas import agent_tools
 from squad.agent.templates import DEFAULT_IMPORTS, MAIN_TEMPLATE
@@ -106,9 +107,12 @@ class Agent(Base):
                 + input_files
                 + ["\n", task]
             )
+        prompt_templates = deepcopy(CODE_PROMPTS)
+        prompt_templates["system_prompt"] = DEFAULT_SYSTEM_PROMPT + (
+            "\n" + self.sys_base_prompt if self.sys_base_prompt else ""
+        )
         config_map = {
-            "system_prompt": DEFAULT_SYSTEM_PROMPT
-            + ("\n" + self.sys_base_prompt if self.sys_base_prompt else ""),
+            "prompt_templates": prompt_templates,
             "agent_model": self.model,
             "context_size": self.context_size or settings.default_context_size,
             "agent_callbacks": [],
