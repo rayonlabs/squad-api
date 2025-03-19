@@ -196,6 +196,10 @@ class Settings(BaseSettings):
     default_limit_max_tools: int = int(os.getenv("LIMIT_MAX_TOOLS", "5"))
     default_limit_max_agents: int = int(os.getenv("LIMIT_MAX_AGENTS", "1"))
     default_limit_max_agent_tools: int = int(os.getenv("LIMIT_MAX_AGENT_TOOLS", "5"))
+    default_allowed_models: list[str] = [
+        "unsloth/gemma-3-27b-it",
+        "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+    ]
 
     # Misc.
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"

@@ -366,6 +366,7 @@ async def invoke_agent(
         inputs=input_paths,
         public=public,
     )
+    invocation.agent = agent
     db.add(invocation)
     await db.commit()
     await settings.redis_client.xadd(

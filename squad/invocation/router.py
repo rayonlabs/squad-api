@@ -206,7 +206,7 @@ async def stream_invocation(
                 last_offset = offset.decode()
                 parts = last_offset.split("-")
                 last_offset = parts[0] + "-" + str(int(parts[1]) + 1)
-                if data[b"data"] == b"DONE":
+                if b'"log":"DONE"' in data[b"data"]:
                     await settings.redis_client.delete(invocation.stream_key)
                     yield "DONE\n"
                     break

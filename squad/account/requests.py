@@ -20,7 +20,7 @@ class AccountLimitRequest(BaseModel):
     max_invocations: int = Field(settings.default_limit_max_invocations, ge=1)
     max_tools: int = Field(settings.default_limit_max_tools, ge=1)
     max_agents: int = Field(settings.default_limit_max_agents, ge=1)
-    max_agent_tools: int = Field(settings.default_limit_agent_tools, ge=1)
+    max_agent_tools: int = Field(settings.default_limit_max_agent_tools, ge=1)
     allow_private_agents: Optional[bool] = False
     allow_private_tools: Optional[bool] = False
     allow_private_invocations: Optional[bool] = True

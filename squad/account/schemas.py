@@ -28,8 +28,10 @@ class AccountLimit(Base):
     )
     max_tools = Column(Integer, nullable=False, default=settings.default_limit_max_tools)
     max_agents = Column(Integer, nullable=False, default=settings.default_limit_max_agents)
-    max_agent_tools = Column(Integer, nullable=False, default=settings.default_limit_agent_tools)
+    max_agent_tools = Column(
+        Integer, nullable=False, default=settings.default_limit_max_agent_tools
+    )
     allow_private_agents = Column(Boolean, nullable=False, default=False)
     allow_private_tools = Column(Boolean, nullable=False, default=False)
     allow_private_invocations = Column(Boolean, nullable=False, default=True)
-    allowed_models = Column(ARRAY(String), nullable=False)
+    allowed_models = Column(ARRAY(String), nullable=False, default=settings.default_allowed_models)

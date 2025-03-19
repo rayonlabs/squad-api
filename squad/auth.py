@@ -88,11 +88,11 @@ def get_current_user(
     ):
         try:
             return await load_chute_user(authorization)
-        except Exception:
+        except Exception as exc:
             if raise_not_found:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Unauthorized.",
+                    detail=f"Unauthorized: {exc}",
                 )
         return None
 
