@@ -176,6 +176,7 @@ async def execute(invocation_id):
                     await _ship_log(invocation_id, decoded_line)
                 else:
                     logger.info(f"Done logging: {name}")
+                    await _ship_log(invocation_id, "DONE")
                     break
 
     # Execute.

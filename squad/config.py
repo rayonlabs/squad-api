@@ -190,7 +190,7 @@ class Settings(BaseSettings):
     default_limit_max_steps: int = int(os.getenv("LIMIT_MAX_STEPS", "5"))
     default_limit_max_execution_time: int = int(os.getenv("LIMIT_MAX_EXECUTION_TIME", "300"))
     default_limit_max_invocations: int = int(os.getenv("LIMIT_MAX_INVOCATIONS", "48"))
-    default_limit_max_invocation_window: int = int(
+    default_limit_max_invocations_window: int = int(
         os.getenv("LIMIT_MAX_INVOCATION_WINDOW", str(24 * 60 * 60))
     )
     default_limit_max_tools: int = int(os.getenv("LIMIT_MAX_TOOLS", "5"))
