@@ -2,6 +2,7 @@
 (Minimal) validation code for tool creation.
 """
 
+import aiohttp
 from sqlalchemy import select
 from typing import Optional
 from pydantic import BaseModel, Field, ValidationError, constr
@@ -9,7 +10,9 @@ from fastapi import HTTPException, status
 from squad.tool.schemas import Tool
 from smolagents import Tool as STool
 import squad.util as util
+from squad.auth import generate_auth_token
 import squad.tool.builtin as builtin
+from squad.config import settings
 
 
 class ImageArgs(BaseModel):
@@ -52,6 +55,13 @@ class MemoryArgs(BaseModel):
 
 
 class VLMArgs(LLMArgs): ...
+
+
+class AgentCallerArgs(BaseModel):
+    agent: str
+    tool_description: str
+    tool_name: str = None
+    public: Optional[bool] = True
 
 
 class ToolValidator:
@@ -149,6 +159,27 @@ class ToolValidator:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Validation error: {exc}",
             )
+
+    async def validate_agent_caller_tool(self):
+        """
+        Validate agent caller tools.
+        """
+        try:
+            agent_args = AgentCallerArgs(**self.args.tool_args)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{settings.squad_api_base_url}/agents/{agent_args.agent}",
+                    headers={"Authorization": f"Bearer {generate_auth_token(self.user.user_id)}"},
+                ) as resp:
+                    resp.raise_for_status()
+                    return
+        except Exception:
+            ...
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid agent caller definition: {agent_args.model_dump()}",
+        )
 
     async def validate_memory_tool(self):
         """
