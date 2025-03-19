@@ -1,6 +1,6 @@
 # Base layer.
 FROM python:3.12.8 AS base
-RUN apt update && apt -y install vim jq bc net-tools curl wget
+RUN apt update && apt -y install vim jq bc net-tools curl wget pkg-config libgraphviz-dev libcairo2-dev libpango1.0-dev libgdk-pixbuf2.0-dev
 RUN useradd squad -s /bin/bash -d /home/squad && mkdir -p /home/squad && chown squad:squad /home/squad
 RUN mkdir -p /app && chown squad:squad /app
 USER squad
@@ -48,51 +48,10 @@ RUN apt -y update && apt -y install \
     ghostscript \
     libfreetype6-dev \
     libfontconfig1-dev
-RUN chown squad:squad /app/poetry.lock /app/pyproject.toml && chmod +w /app/poetry.lock /app/pyproject.toml
 USER squad
-RUN poetry add \
-    playwright \
-    numpy \
-    pandas \
-    requests \
-    scikit-learn \
-    pytz \
-    matplotlib \
-    seaborn \
-    statsmodels \
-    scipy \
-    openpyxl \
-    xlrd \
-    pyyaml \
-    plotly \
-    altair \
-    folium \
-    sympy \
-    opencv-python \
-    markitdown \
-    csvkit \
-    tabulate \
-    pdf2image \
-    PyPDF2 \
-    exifread \
-    rawpy \
-    lxml \
-    beautifulsoup4 \
-    ujson \
-    orjson \
-    py7zr \
-    rarfile \
-    msgpack \
-    protobuf \
-    wandb \
-    pydub \
-    soundfile \
-    ffmpeg-python \
-    pycairo \
-    pygraphviz \
-    pythreejs \
-    vtk \
-    tesseract
+ADD pyproject-worker.toml /app/pyproject.toml
+ADD poetry-worker.lock /app/poetry.lock
+RUN poetry install --no-root
 RUN poetry run playwright install
 ADD --chown=squad squad /app/squad
 ADD --chown=squad migrations /app/migrations

@@ -26,3 +26,5 @@ from squad.tool.builtin.llm import llm_tool
 from squad.tool.builtin.vlm import vlm_tool
 from squad.tool.builtin.tts import tts_tool
 from squad.tool.builtin.image import image_tool
+from squad.tool.builtin.data_universe import DataUniverseSearcher
+from squad.tool.builtin.apex_search import ApexWebSearcher

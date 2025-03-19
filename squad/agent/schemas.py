@@ -3,8 +3,9 @@ ORM definitions/methods for agents.
 """
 
 import re
+from copy import deepcopy
 from async_lru import alru_cache
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 from sqlalchemy import (
     select,
@@ -20,10 +21,20 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from squad.config import settings
 import squad.tool.builtin as builtin
 from smolagents import Tool as STool
-from squad.tool.prompts import DEFAULT_SYSTEM_PROMPT, DEFAULT_X_ADDENDUM
+from squad.tool.prompts import CODE_PROMPTS, DEFAULT_SYSTEM_PROMPT, DEFAULT_X_ADDENDUM
 from squad.database import Base, generate_uuid, get_session
 from squad.agent_tool.schemas import agent_tools
 from squad.agent.templates import DEFAULT_IMPORTS, MAIN_TEMPLATE
+
+
+def is_valid_name(name):
+    if (
+        not isinstance(name, str)
+        or not re.match(r"^(?:([a-zA-Z0-9_\.-]+)/)*([a-z0-9][a-z0-9_\.\/-]*)$", name, re.I)
+        or len(name) >= 64
+    ):
+        return False
+    return True
 
 
 class Agent(Base):
@@ -70,7 +81,18 @@ class Agent(Base):
 
     __table_args__ = (
         Index("unique_x_user", "x_username", unique=True, postgresql_where=(x_username != None)),  # noqa
+        Index("unique_name", "name", unique=True),  # noqa
     )
+
+    @validates("name")
+    def validate_name(self, _, name):
+        if not is_valid_name(name):
+            raise ValueError(f"Invalid agent name: {name}")
+        return name
+
+    @property
+    def x_connected(self):
+        return self.x_token_expires_at is not None
 
     def as_executable(
         self, task: str, max_steps: int = None, source: str = "api", input_files: list[str] = None
@@ -86,8 +108,12 @@ class Agent(Base):
                 + input_files
                 + ["\n", task]
             )
+        prompt_templates = deepcopy(CODE_PROMPTS)
+        prompt_templates["system_prompt"] = DEFAULT_SYSTEM_PROMPT + (
+            "\n" + self.sys_base_prompt if self.sys_base_prompt else ""
+        )
         config_map = {
-            "system_prompt": self.sys_base_prompt or DEFAULT_SYSTEM_PROMPT,
+            "prompt_templates": prompt_templates,
             "agent_model": self.model,
             "context_size": self.context_size or settings.default_context_size,
             "agent_callbacks": [],
@@ -143,6 +169,7 @@ class Agent(Base):
                     config_map["agent_callbacks"].append("wipe_tool_creation_step")
                 if isinstance(ref, type) and issubclass(ref, STool):
                     code.append(f"{tool.name} = {tool.template}()")
+                    tool_names.append(tool.name)
                 else:
                     config_map["tools"][tool.name] = tool.tool_args
                     code.append(
@@ -169,3 +196,12 @@ async def get_by_x(x_username: str | int, runtime: float = 0.0):
     query = select(Agent).where(Agent.x_username.ilike(x_username))
     async with get_session() as session:
         return (await session.execute(query)).unique().scalar_one_or_none()
+
+
+async def get_by_id(agent_id: str):
+    async with get_session() as session:
+        return (
+            (await session.execute(select(Agent).where(Agent.agent_id == agent_id)))
+            .unique()
+            .scalar_one_or_none()
+        )

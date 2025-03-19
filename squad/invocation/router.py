@@ -9,7 +9,7 @@ import traceback
 from loguru import logger
 from pathlib import Path
 from typing import Optional, Any, Annotated
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import (
     APIRouter,
@@ -25,6 +25,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from squad.auth import get_current_user, get_current_agent
 from squad.util import now_str
+from squad.agent.schemas import Agent
 from squad.config import settings
 from squad.database import get_db_session
 from squad.pagination import PaginatedResponse
@@ -51,6 +52,7 @@ async def _load_invocation(db, invocation_id, user_id):
 async def list_invocations(
     db: AsyncSession = Depends(get_db_session),
     agent_id: Optional[str] = None,
+    agent_name: Optional[str] = None,
     include_public: Optional[bool] = False,
     search: Optional[str] = None,
     limit: Optional[int] = 10,
@@ -73,6 +75,12 @@ async def list_invocations(
         query = query.where(Invocation.user_id == user_id)
     if agent_id:
         query = query.where(Invocation.agent_id == agent_id)
+    if agent_name:
+        query = query.join(Agent, Invocation.agent_id == Agent.agent_id).where(
+            Agent.name.ilike(agent_name)
+        )
+    if search:
+        query = query.where(Invocation.task.ilike(f"%{search}%"))
 
     # Perform a count.
     total_query = select(func.count()).select_from(query.subquery())
@@ -265,24 +273,23 @@ async def upload_file(
         )
 
     output_paths = []
-    tasks = []
     dt = invocation.created_at
     base_path = f"invocations/{dt.year}/{dt.month}/{dt.day}/{invocation_id}/outputs/"
-    async with settings.s3_client() as s3:
-        for file in files:
-            logger.info(f"Attempting to upload output file to blob store: {file.filename}")
-            content = await file.read()
-            destination = f"{base_path}{file.filename}"
-            output_paths.append(destination)
-            tasks.append(
-                s3.upload_fileobj(
-                    io.BytesIO(content),
-                    settings.storage_bucket,
-                    destination,
-                )
+    for file in files:
+        logger.info(f"Attempting to upload output file to blob store: {file.filename}")
+        content = await file.read()
+        destination = f"{base_path}{file.filename}"
+        output_paths.append(destination)
+        async with settings.s3_client() as s3:
+            await s3.upload_fileobj(
+                io.BytesIO(content),
+                settings.storage_bucket,
+                destination,
             )
-        await asyncio.gather(*tasks)
-    invocation.outputs = output_paths
+    update_stmt = text(
+        "UPDATE invocations SET outputs = array_cat(outputs, :new_outputs) WHERE invocation_id = :invocation_id"
+    )
+    await db.execute(update_stmt, {"invocation_id": invocation_id, "new_outputs": output_paths})
     await db.commit()
     await db.refresh(invocation)
     return output_paths

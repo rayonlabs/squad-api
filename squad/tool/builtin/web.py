@@ -1,6 +1,6 @@
-import os
 import io
 import re
+import asyncio
 import requests
 import tempfile
 from contextlib import contextmanager
@@ -222,10 +222,12 @@ class WebSearcher(Tool):
             query += " " + " ".join([f"site:{domain}" for domain in filter_domains_csv.split(",")])
         params = {"q": query}
         params.update(extra_arguments)
-        result = requests.get(
-            "https://api.search.brave.com/res/v1/web/search",
-            params=params,
-            headers={"x-subscription-token": os.getenv("BRAVE_API_TOKEN")},
+        result = requests.post(
+            f"{settings.squad_api_base_url}/data/brave/search",
+            json=params,
+            headers={
+                "Authorization": settings.authorization,
+            },
         )
         result.raise_for_status()
         raw_result = result.json()
@@ -262,5 +264,8 @@ class WebSearcher(Tool):
                 )
             singular_results.append("\n".join(summary))
         if top_n is not None and singular_results:
-            return rerank(query, singular_results, top_n=top_n, auth=settings.authorization)
+            loop = asyncio.get_event_loop()
+            return loop.run_until_complete(
+                rerank(query, singular_results, top_n=top_n, auth=settings.authorization)
+            )
         return "\n---\n".join(singular_results[: top_n or 5])

@@ -152,4 +152,24 @@ app.kubernetes.io/name: execution
     secretKeyRef:
       name: brave-secret
       key: token
+- name: DATA_UNIVERSE_BASE_URL
+  valueFrom:
+    secretKeyRef:
+      name: data-universe-config
+      key: base-url
+- name: DATA_UNIVERSE_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: data-universe-config
+      key: key
+- name: APEX_SEARCH_BASE_URL
+  valueFrom:
+    secretKeyRef:
+      name: apex-search-config
+      key: base-url
+- name: APEX_SEARCH_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: apex-search-config
+      key: key
 {{- end }}

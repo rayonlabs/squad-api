@@ -27,6 +27,7 @@ class AgentResponse(BaseModel):
     x_last_mentioned_at: Optional[datetime]
     x_searches: Optional[list[str]]
     x_invoke_filter: Optional[str] = None
+    x_connected: Optional[bool] = False
     created_at: datetime
     updated_at: datetime
     tools: Optional[list[ToolResponse]]

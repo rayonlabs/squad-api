@@ -2,8 +2,8 @@ agentConfig:
   defaults:
     models:
       image: FLUX.1-schnell
-      vlm: OpenGVLab/InternVL2_5-78B
-      llm: deepseek-ai/DeepSeek-V3
+      vlm: mistralai/Mistral-Small-3.1-24B-Instruct-2503
+      llm: deepseek-ai/DeepSeek-R1
     params:
       tts:
         voice: af_sky

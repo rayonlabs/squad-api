@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import orjson as json
 import pybase64 as base64
 from typing import Optional, Any, Annotated
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
 from squad.util import now_str
@@ -15,7 +15,7 @@ from squad.auth import get_current_user
 from squad.config import settings
 from squad.database import get_db_session
 from squad.pagination import PaginatedResponse
-from squad.agent.schemas import Agent
+from squad.agent.schemas import Agent, is_valid_name
 from squad.agent.requests import AgentArgs
 from squad.agent.response import AgentResponse
 from squad.tool.schemas import Tool
@@ -131,6 +131,20 @@ async def list_agents(
     }
 
 
+@router.get("/name_check")
+async def check_agent_name(
+    name: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    if not is_valid_name(name):
+        return {"valid": False, "available": False}
+    query = select(exists().where(Agent.name.ilike(name)))
+    agent_exists = await db.scalar(query)
+    if agent_exists:
+        return {"available": False, "valid": True}
+    return {"available": True, "valid": True}
+
+
 @router.get("/{agent_id_or_name}", response_model=AgentResponse)
 async def get_agent(
     agent_id_or_name: str,
@@ -180,6 +194,15 @@ async def create_agent(
         return HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
+        )
+
+    # Check name uniqueness.
+    query = select(exists().where(Agent.name.ilike(agent.name)))
+    agent_exists = await db.scalar(query)
+    if agent_exists:
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"An agent with name {agent.name} already exists",
         )
 
     # Add the tools.
@@ -256,13 +279,17 @@ async def invoke_agent(
 ):
     task = None
     files_b64 = None
+    public = None
     if request.headers.get("content-type") == "application/json":
         body = await request.json()
         task = body.get("task")
         files_b64 = body.get("files_b64")
+        public = body.get("public")
     else:
         form = await request.form()
         task = form.get("task")
+        public = form.get("public")
+    public = str(public).lower() not in ("false", "0")
     if not task:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -326,6 +353,7 @@ async def invoke_agent(
         user_id=user.user_id,
         task=task,
         inputs=input_paths,
+        public=public,
     )
     db.add(invocation)
     await db.commit()
