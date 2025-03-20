@@ -6,6 +6,7 @@ import io
 import orjson as json
 import asyncio
 import traceback
+from datetime import timedelta
 from loguru import logger
 from pathlib import Path
 from typing import Optional, Any, Annotated
@@ -107,6 +108,29 @@ async def list_invocations(
         "page": page,
         "limit": limit,
         "items": [InvocationResponse.from_orm(item) for item in result.unique().scalars().all()],
+    }
+
+
+@router.get("/quota")
+async def check_quota(
+    db: AsyncSession = Depends(get_db_session),
+    user: Any = Depends(get_current_user()),
+):
+    count = (
+        await db.execute(
+            select(func.count())
+            .select_from(Invocation)
+            .where(
+                Invocation.user_id == user.user_id,
+                Invocation.created_at
+                >= func.now() - timedelta(seconds=user.limits.max_invocations_window),
+            )
+        )
+    ).scalar_one()
+    return {
+        "count": count,
+        "window": user.limits.max_invocations_window,
+        "limit": user.limits.max_invocations,
     }
 
 

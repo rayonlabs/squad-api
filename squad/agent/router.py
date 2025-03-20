@@ -347,7 +347,7 @@ async def invoke_agent(
             select(func.count())
             .select_from(Invocation)
             .where(
-                Invocation.agent_id == agent.agent_id,
+                Invocation.user_id == user.user_id,
                 Invocation.created_at
                 >= func.now() - timedelta(seconds=user.limits.max_invocations_window),
             )
