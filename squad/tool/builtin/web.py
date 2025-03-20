@@ -201,27 +201,24 @@ class WebSearcher(Tool):
             "nullable": True,
             "description": "If (AND ONLY IF) the task given from the user/input tweet requires using specific domains, the CSV of domains to limit search results to.",
         },
-        "extra_arguments": {
+        "kwargs": {
             "type": "object",
             "description": (
                 "Optional search flags/settings to augment, limit, or filter results. "
-                "Must be passed as a dict with key value pairs, where values are always strings. "
-                "Supported extra_argument values are the following (but do not include 'query'): "
+                "Treat this as normal python kwargs, not a dict. "
+                "Supported kwargs are the following (but do not include 'query'): "
                 f"{BraveSearchParams.model_json_schema()}"
             ),
-            "nullable": True,
         },
     }
     output_type = "string"
 
-    def forward(
-        self, query: str, top_n: int = 5, filter_domains_csv: str = None, extra_arguments: dict = {}
-    ):
+    def forward(self, query: str, top_n: int = 5, filter_domains_csv: str = None, **kwargs):
         query = re.sub(r"site:[^ ]\s*", "", query)
         if filter_domains_csv:
             query += " " + " ".join([f"site:{domain}" for domain in filter_domains_csv.split(",")])
         params = {"q": query}
-        params.update(extra_arguments)
+        params.update(kwargs)
         result = requests.post(
             f"{settings.squad_api_base_url}/data/brave/search",
             json=params,

@@ -30,6 +30,7 @@ class Invocation(Base):
     inputs = Column(ARRAY(String), nullable=True)
     outputs = Column(ARRAY(String), nullable=True)
     answer = Column(JSONB, nullable=True)
+    queue_name = Column(String, nullable=False, default="squad-free")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True))

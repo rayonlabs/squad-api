@@ -2,6 +2,7 @@
 Utilities and helpers.
 """
 
+import os
 import hashlib
 import time
 import secrets
@@ -28,7 +29,9 @@ NSFW_SM = SessionManager(
 HATE_SM = SessionManager(
     base_url="https://chutes-hate-speech-detector.chutes.ai",
 )
-TOKENIZER = transformers.AutoTokenizer.from_pretrained("BAAI/bge-reranker-large")
+TOKENIZER = transformers.AutoTokenizer.from_pretrained(
+    os.path.join(os.path.dirname(__file__), "..", "bge-reranker-large")
+)
 
 
 @lru_cache(maxsize=1)

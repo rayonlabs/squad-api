@@ -2,9 +2,10 @@
 Router to handle tools.
 """
 
+import re
 import squad.tool.builtin as builtin_tools
 from typing import Optional, Any
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status
 from squad.auth import get_current_user
@@ -110,6 +111,20 @@ async def list_tools(
     }
 
 
+@router.get("/name_check")
+async def check_tool_name(
+    name: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
+        return {"valid": False, "available": False}
+    query = select(exists().where(Tool.name.ilike(name)))
+    tool_exists = await db.scalar(query)
+    if tool_exists:
+        return {"available": False, "valid": True}
+    return {"available": True, "valid": True}
+
+
 @router.get("/{tool_id}", response_model=ToolResponse)
 async def get_tool(
     tool_id: str,
@@ -131,9 +146,24 @@ async def create_tool(
     db: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user()),
 ):
+    count = (
+        await db.execute(select(func.count()).select_from(Tool).where(Tool.user_id == user.user_id))
+    ).scalar_one()
+    if count >= user.limits.max_tools:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"You have reached or exceeded the maximum number of tools for your account tier: {count}",
+        )
+
     args.tool_args["tool_name"] = args.name
     if not args.tool_args.get("tool_description"):
         args.tool_args["tool_description"] = args.description
+    if args.template is None and not user.limits.allow_custom_tools:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="You need a higher service tier to use custom code",
+        )
+
     validator = ToolValidator(db, args, user)
     await validator.validate()
     tool = None

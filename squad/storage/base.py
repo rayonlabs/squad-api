@@ -207,7 +207,7 @@ def detect_language(text: str) -> str:
     Exception,
     jitter=None,
     interval=5,
-    max_tries=3,
+    max_tries=5,
 )
 async def generate_embeddings(text: str, api_key: str) -> list[float]:
     """

@@ -38,15 +38,13 @@ def memory_searcher(
                 "type": "string",
                 "description": "search query string to use when performing the search",
             },
-            "extra_arguments": {
+            "kwargs": {
                 "type": "object",
                 "description": (
-                    "Optional search flags/settings to augment, limit, or filter results. "
-                    "Must be passed as a dict with key value pairs, where values are always strings. "
-                    "Supported extra_argument values are the following (but do not include 'text' or 'session_id'): "
+                    "Optional search flags/settings to augment, limit, or filter results. Treat this as normal python kwargs, not a dict. "
+                    "Supported kwargs values are the following (but do not include 'text' or 'session_id'): "
                     f"{MemorySearchParams.model_json_schema()}"
                 ),
-                "nullable": True,
             },
         }
         if not static_session_id:
@@ -60,11 +58,9 @@ def memory_searcher(
             }
         output_type = "string"
 
-        def _session_forward(
-            self, text: str, session_id: str = static_session_id, extra_arguments: dict = {}
-        ):
+        def _session_forward(self, text: str, session_id: str = static_session_id, **kwargs):
             params = {"text": text}
-            params.update(extra_arguments)
+            params.update(kwargs)
             if session_id:
                 params.update({"session_id": session_id})
             raw_response = requests.post(
@@ -93,10 +89,8 @@ def memory_searcher(
                 return "No memories exist yet, you should create a memory with text='firstimpression: ...' if appropriate."
             return "\n".join(response)
 
-        def _static_forward(self, text: str, extra_arguments: dict = {}):
-            return self._session_forward(
-                text, session_id=static_session_id, extra_arguments=extra_arguments
-            )
+        def _static_forward(self, text: str, **kwargs):
+            return self._session_forward(text, session_id=static_session_id, **kwargs)
 
         if static_session_id:
             forward = _static_forward
@@ -149,15 +143,14 @@ def memory_creator(
                 "type": "string",
                 "description": "search query string to use when performing the search",
             },
-            "extra_arguments": {
+            "kwargs": {
                 "type": "object",
                 "description": (
                     "Optional parameters to set on the memory, not required. "
-                    "Must be passed as a dict with key value pairs, where values are always strings. "
-                    "Supported extra_argument values are the following (but do not include 'text' or 'session_id'): "
+                    "Treat this as normal python kwargs, not a dict. "
+                    "Supported kwargs are the following (but do not include 'text' or 'session_id'): "
                     f"{MemoryArgs.model_json_schema()}"
                 ),
-                "nullable": True,
             },
         }
         if not static_session_id:
@@ -171,14 +164,12 @@ def memory_creator(
             }
         output_type = "string"
 
-        def _session_forward(
-            self, text: str, session_id: str = static_session_id, extra_arguments: dict = {}
-        ):
-            print(f"Trying to create a memory: {text=} {session_id=} {extra_arguments=}")
+        def _session_forward(self, text: str, session_id: str = static_session_id, **kwargs):
+            print(f"Trying to create a memory: {text=} {session_id=} {kwargs=}")
             params = {"text": text}
             if session_id:
                 params.update({"session_id": session_id})
-            params.update(extra_arguments)
+            params.update(kwargs)
             try:
                 response = requests.post(
                     f"{settings.squad_api_base_url}/data/memories",
@@ -194,10 +185,8 @@ def memory_creator(
                 print(f"Failed to create memory: {exc}")
             return "Failed to create the memory!"
 
-        def _static_forward(self, text: str, extra_arguments: dict = {}):
-            return self._session_forward(
-                text, session_id=static_session_id, extra_arguments=extra_arguments
-            )
+        def _static_forward(self, text: str, **kwargs):
+            return self._session_forward(text, session_id=static_session_id, **kwargs)
 
         if static_session_id:
             forward = _static_forward

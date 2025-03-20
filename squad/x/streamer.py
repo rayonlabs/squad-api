@@ -63,7 +63,7 @@ STATIC_ACCOUNTS = " OR ".join(
 
 STATIC_RULES = {
     f"(#bittensor OR $tao OR {STATIC_ACCOUNTS})"
-    "-$fet -$FET -$eth -$ETH -$fart -$FART -$xrp -$XRP -$sol -$SOL -$trx -$TRX -$pepe -$PEPE -$aapl -$AAPL "
+    "-$fet -$FET -$eth -$ETH -$fart -$FART -$xrp -$XRP -$sol -$SOL -$trx -$TRX -$pepe -$PEPE -$aapl -$AAPL -telegram "
     "-$trump -$TRUMP -🔴LIVE -airdrop -#solana -#SOLANA -AIRDROP -Airdrop -$BTCAI -$btcai -is:retweet -is:reply",
 }
 
@@ -252,6 +252,9 @@ class XR:
             logger.error(f"X stream error: {error}")
             if self.running:
                 await asyncio.sleep(5)
+                self.stream = AsyncStreamingClient(
+                    bearer_token=settings.tweepy_client.bearer_token, wait_on_rate_limit=True
+                )
                 await self._start_stream()
 
         self.stream.on_tweet = on_tweet

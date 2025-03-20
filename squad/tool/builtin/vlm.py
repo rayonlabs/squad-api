@@ -15,8 +15,7 @@ def vlm_tool(
     tool_description: str = None,
     system_prompt: str = None,
     temperature: float = 0.7,
-    max_tokens: int = 1024,
-    max_images: int = 8,
+    max_images: int = 1,
     **kwargs,
 ):
     """

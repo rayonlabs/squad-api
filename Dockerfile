@@ -8,6 +8,7 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 ENV PATH=$PATH:/home/squad/.local/bin
 ADD pyproject.toml /app/
 ADD poetry.lock /app/
+ADD bge-reranker-large /app/bge-reranker-large
 WORKDIR /app
 RUN poetry install --no-root
 
