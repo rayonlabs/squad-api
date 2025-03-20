@@ -179,11 +179,13 @@ async def create_agent(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=f"You have reached or exceeded the maximum number of agents for your account tier: {count}",
         )
-    if args.default_max_steps >= user.limits.max_steps:
+    if args.default_max_steps > user.limits.max_steps:
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail=f"Your account is limited to {user.limits.max_steps} max steps per agent.",
         )
+    if not args.max_execution_time or args.max_execution_time > user.limits.max_execution_time:
+        args.max_execution_time = user.limits.max_execution_time
     try:
         agent_args = args.model_dump()
         if not agent_args.get("name"):
@@ -248,6 +250,15 @@ async def update_agent(
     agent = await _load_agent(db, agent_id_or_name, user.user_id)
     current_model = agent.model
 
+    # Make sure they didn't try updating beyond account limits.
+    args.max_execution_time = min(
+        args.max_execution_time or agent.max_execution_time or user.limits.max_execution_time,
+        user.limits.max_execution_time,
+    )
+    args.default_max_steps = min(
+        args.default_max_steps or agent.default_max_steps or user.limits.max_steps
+    )
+
     tool_ids = []
     agent_args = {}
     try:
@@ -282,6 +293,10 @@ async def update_agent(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Could not determine agent context size: {exc}",
             )
+
+    # Sanity check defaults/limits.
+    if not args.max_execution_time or args.max_execution_time > user.limits.max_execution_time:
+        args.max_execution_time = user.limits.max_execution_time
 
     # Add the tools.
     tool_ids = body.get("tool_ids")

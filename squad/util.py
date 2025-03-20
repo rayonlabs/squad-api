@@ -32,7 +32,7 @@ TOKENIZER = {}
 
 
 @lru_cache(maxsize=1)
-async def tokenizer():
+def tokenizer():
     import transformers
 
     if not TOKENIZER:

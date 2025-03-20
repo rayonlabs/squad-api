@@ -38,6 +38,12 @@ class AgentArgs(BaseModel):
         ge=1,
         le=50,
     )
+    max_execution_time: Optional[int] = Field(
+        core_settings.default_limit_max_execution_time,
+        description="Maximum execution time in seconds.",
+        ge=60,
+        le=24 * 60 * 60,
+    )
     sys_base_prompt: Optional[str] = Field(
         None,
         description="Prompt override for the core system/coding agent prompt. Modify with great care.",

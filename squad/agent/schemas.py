@@ -209,7 +209,6 @@ class Agent(Base):
                             headers={"Authorization": token},
                         ) as chute_resp:
                             chute = await chute_resp.json()
-                            print(chute)
                             async with session.get(
                                 f"https://api.chutes.ai/chutes/code/{chute['chute_id']}"
                             ) as code_resp:
@@ -222,7 +221,6 @@ class Agent(Base):
                                 async with session.get(
                                     f"https://huggingface.co/{model}/resolve/main/config.json"
                                 ) as hf_resp:
-                                    print(await hf_resp.text())
                                     resp.raise_for_status()
                                     try:
                                         config = await hf_resp.json()
