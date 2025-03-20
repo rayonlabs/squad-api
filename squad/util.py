@@ -7,7 +7,6 @@ import hashlib
 import time
 import secrets
 import datetime
-import transformers
 import requests
 import traceback
 from functools import lru_cache
@@ -29,9 +28,18 @@ NSFW_SM = SessionManager(
 HATE_SM = SessionManager(
     base_url="https://chutes-hate-speech-detector.chutes.ai",
 )
-TOKENIZER = transformers.AutoTokenizer.from_pretrained(
-    os.path.join(os.path.dirname(__file__), "..", "bge-reranker-large")
-)
+TOKENIZER = {}
+
+
+@lru_cache(maxsize=1)
+async def tokenizer():
+    import transformers
+
+    if not TOKENIZER:
+        TOKENIZER["t"] = transformers.AutoTokenizer.from_pretrained(
+            os.path.join(os.path.dirname(__file__), "..", "bge-reranker-large")
+        )
+    return TOKENIZER["t"]
 
 
 @lru_cache(maxsize=1)
@@ -182,10 +190,10 @@ async def rerank(query, texts: list[str], top_n: int = 3, auth: str = None):
         return texts
     rerank_docs = []
     for item in texts:
-        tokens = TOKENIZER.encode(item)
+        tokens = tokenizer().encode(item)
         if len(tokens) > 475:
             tokens = tokens[:475]
-            rerank_docs.append(TOKENIZER.decode(tokens, skip_special_tokens=True))
+            rerank_docs.append(tokenizer().decode(tokens, skip_special_tokens=True))
         else:
             rerank_docs.append(item)
     # Rerank.
