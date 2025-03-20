@@ -214,6 +214,7 @@ async def stream_invocation(
                 last_offset = offset.decode()
                 parts = last_offset.split("-")
                 last_offset = parts[0] + "-" + str(int(parts[1]) + 1)
+                print(f"STREAM: {offset=} {data=}")
                 try:
                     log_data = json.loads(data[b"data"])
                     if log_data["log"] == "DONE":

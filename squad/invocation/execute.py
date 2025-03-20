@@ -175,6 +175,7 @@ async def execute(invocation_id):
                     outfile.write(decoded_line + "\n")
                     await _ship_log(invocation_id, decoded_line)
                 else:
+                    await _ship_log(invocation_id, "DONE")
                     logger.info(f"Done logging: {name}")
                     break
 
