@@ -85,7 +85,7 @@ agent = CodeAgent(
         model_id=__tool_args["agent_model"],
         api_base="https://llm.chutes.ai/v1",
         api_key=settings.authorization,
-        max_tokens=__tool_args["context_size"],
+        flatten_messages_as_text=True,
     )
 )
 set_agent(agent)

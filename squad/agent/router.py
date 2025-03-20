@@ -192,9 +192,18 @@ async def create_agent(
         agent = Agent(**agent_args)
         agent.user_id = user.user_id
     except ValueError as exc:
-        return HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
+        )
+
+    # Set context size.
+    try:
+        agent.context_size = await agent.get_context_size()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not determine agent context size: {exc}",
         )
 
     # Check the model.
@@ -237,6 +246,8 @@ async def update_agent(
     user: Any = Depends(get_current_user()),
 ):
     agent = await _load_agent(db, agent_id_or_name, user.user_id)
+    current_model = agent.model
+
     tool_ids = []
     agent_args = {}
     try:
@@ -252,6 +263,25 @@ async def update_agent(
     for key, value in body.items():
         if key in agent_args and key != "tool_ids":
             setattr(agent, key, value)
+
+    # Model change?
+    if current_model != agent.model:
+        if (
+            "all" not in user.limits.allowed_models
+            and agent.model not in user.limits.allowed_models
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Your account is limited to the following models: {user.limits.allowed_models}",
+            )
+        # Set context size.
+        try:
+            agent.context_size = await agent.get_context_size()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not determine agent context size: {exc}",
+            )
 
     # Add the tools.
     tool_ids = body.get("tool_ids")

@@ -25,23 +25,22 @@ class XSearcher(Tool):
             "nullable": True,
             "description": "perform reranking to return only the top top_n related tweets",
         },
-        "extra_arguments": {
+        "kwargs": {
             "type": "object",
             "description": (
                 "Optional search flags/settings to augment, limit, or filter results. "
-                "Must be passed as a dict with key value pairs, where values are always strings. "
-                "Supported extra_argument values are the following (but do not include 'query'): "
+                "Treat this as normal python kwargs, not a dict. "
+                "Supported kwargs are the following (but do not include 'query'): "
                 f"{XSearchParams.model_json_schema()}\n"
                 "Be sure to pass `has=['photo']` when searching for images."
             ),
-            "nullable": True,
         },
     }
     output_type = "string"
 
-    def forward(self, query: str, top_n: int = 5, extra_arguments: dict = {}):
+    def forward(self, query: str, top_n: int = 5, **kwargs):
         params = {"text": query}
-        params.update(extra_arguments)
+        params.update(kwargs)
         raw_response = requests.post(
             f"{settings.squad_api_base_url}/data/x/search",
             json=params,

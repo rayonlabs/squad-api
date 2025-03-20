@@ -46,6 +46,7 @@ kubernetes = "^32.0.0"
 aiomcache = "^0.8.2"
 transformers = "^4.48.2"
 tiktoken = "^0.9.0"
+huggingface-hub = "^0.29.3"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.5"

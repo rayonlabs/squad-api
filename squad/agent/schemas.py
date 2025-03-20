@@ -3,6 +3,8 @@ ORM definitions/methods for agents.
 """
 
 import re
+import json
+import aiohttp
 from copy import deepcopy
 from async_lru import alru_cache
 from sqlalchemy.orm import relationship, validates
@@ -186,6 +188,53 @@ class Agent(Base):
             ]
         )
         return config_map, final_code
+
+    async def get_context_size(self):
+        """
+        Attempt fetching the context size of a model.
+        """
+        from squad.auth import generate_auth_token
+
+        token = f"Bearer {generate_auth_token(self.user_id)}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://llm.chutes.ai/v1/models") as resp:
+                models = await resp.json()
+                for data in models["data"]:
+                    model = data.get("id")
+                    if model == self.model:
+                        if size := data.get("max_model_len"):
+                            return size
+                        async with session.get(
+                            f"https://api.chutes.ai/chutes/{model}",
+                            headers={"Authorization": token},
+                        ) as chute_resp:
+                            chute = await chute_resp.json()
+                            print(chute)
+                            async with session.get(
+                                f"https://api.chutes.ai/chutes/code/{chute['chute_id']}"
+                            ) as code_resp:
+                                code = await code_resp.text()
+                                search = re.search(
+                                    "(?:max_model_len|context_size)\s*[=\s]\s*([0-9]+)", code
+                                )
+                                if search:
+                                    return search.group(1)
+                                async with session.get(
+                                    f"https://huggingface.co/{model}/resolve/main/config.json"
+                                ) as hf_resp:
+                                    print(await hf_resp.text())
+                                    resp.raise_for_status()
+                                    try:
+                                        config = await hf_resp.json()
+                                    except Exception:
+                                        config = json.loads(await hf_resp.text())
+                                    length = config.get(
+                                        "max_position_embeddings", config.get("model_max_length")
+                                    )
+                                    if length:
+                                        return length
+                                return 16384  # Fallback.
+        raise Exception(f"Model not supported, could not determine context size: {self.model}")
 
 
 @alru_cache(maxsize=1000)
