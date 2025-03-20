@@ -98,6 +98,7 @@ class ToolValidator:
             async with util.chutes_get(f"/chutes/{name}", self.user) as resp:
                 chute = await resp.json()
                 assert chute.get("standard_template") == template
+                assert chute.get("name") == name
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
