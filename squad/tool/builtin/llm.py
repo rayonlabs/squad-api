@@ -11,7 +11,6 @@ def llm_tool(
     endpoint: str = "chat",
     system_prompt: str = None,
     temperature: float = 0.7,
-    max_tokens: int = 1024,
     **kwargs,
 ):
     """

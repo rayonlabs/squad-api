@@ -31,7 +31,6 @@ def create_env_var_from_os(name: str, default=None):
 def get_environment_variables():
     env_vars = []
     direct_vars = [
-        "SQUAD_API_BASE_URL",
         "PYTHONWARNINGS",
         "OPENSEARCH_URL",
         "DB_POOL_SIZE",
@@ -92,9 +91,13 @@ def create_invocation_job(mapper, connection, invocation):
         api_version="batch/v1",
         kind="Job",
         metadata=client.V1ObjectMeta(
-            name=f"invocation-{job_id}",
+            generate_name=f"invocation-{job_id}",
+            labels={
+                "kueue.x-k8s.io/queue-name": invocation.queue_name,
+            },
         ),
         spec=client.V1JobSpec(
+            suspend=True,
             template=client.V1PodTemplateSpec(
                 metadata=client.V1ObjectMeta(
                     labels={
@@ -155,11 +158,19 @@ def create_invocation_job(mapper, connection, invocation):
                                 "--id",
                                 f"id:{invocation.invocation_id}",
                             ],
+                            resources=client.V1ResourceRequirements(
+                                requests={
+                                    "cpu": "500m" if "free" in invocation.queue_name else "2",
+                                    "memory": "2Gi" if "free" in invocation.queue_name else "4Gi",
+                                },
+                                limits={
+                                    "cpu": "500m" if "free" in invocation.queue_name else "2",
+                                    "memory": "2Gi" if "free" in invocation.queue_name else "4Gi",
+                                },
+                            ),
                             env=[
-                                client.V1EnvVar(name="PYTHONWARNINGS", value="ignore"),
                                 client.V1EnvVar(name="TRANSFORMERS_VERBOSITY", value="error"),
                                 client.V1EnvVar(name="AGENT_ID", value=invocation.agent_id),
-                                client.V1EnvVar(name="SQUAD_API_BASE_URL", value="http://api:8000"),
                                 client.V1EnvVar(
                                     name="EXECUTION_TIMEOUT",
                                     value=f"{invocation.agent.max_execution_time}",

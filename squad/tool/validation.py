@@ -38,20 +38,19 @@ class LLMArgs(BaseModel):
     endpoint: Optional[str] = Field(None, enum=["chat", "completion"])
     system_prompt: Optional[str] = None
     temperature: float = Field(0.7, ge=0.0, le=3.0)
-    max_tokens: int = Field(1024, ge=0.0, le=200000)
 
 
 class TTSArgs(BaseModel):
     voice: str
     slug: constr(pattern="^[a-z0-9-]+$") = "chutes-kokoro-82m"
     tool_name: Optional[str] = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    tool_description: str = (None,)
+    tool_description: Optional[str] = None
 
 
 class MemoryArgs(BaseModel):
     static_session_id: str = None
     tool_name: Optional[str] = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    tool_description: str = None
+    tool_description: Optional[str] = None
 
 
 class VLMArgs(LLMArgs): ...
@@ -59,7 +58,7 @@ class VLMArgs(LLMArgs): ...
 
 class AgentCallerArgs(BaseModel):
     agent: str
-    tool_description: str
+    tool_description: Optional[str] = None
     tool_name: str = None
     public: Optional[bool] = True
 

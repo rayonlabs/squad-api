@@ -2,9 +2,10 @@
 Router to handle tools.
 """
 
+import re
 import squad.tool.builtin as builtin_tools
 from typing import Optional, Any
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status
 from squad.auth import get_current_user
@@ -108,6 +109,20 @@ async def list_tools(
         "limit": limit,
         "items": [ToolResponse.from_orm(item) for item in result.unique().scalars().all()],
     }
+
+
+@router.get("/name_check")
+async def check_tool_name(
+    name: str,
+    db: AsyncSession = Depends(get_db_session),
+):
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
+        return {"valid": False, "available": False}
+    query = select(exists().where(Tool.name.ilike(name)))
+    tool_exists = await db.scalar(query)
+    if tool_exists:
+        return {"available": False, "valid": True}
+    return {"available": True, "valid": True}
 
 
 @router.get("/{tool_id}", response_model=ToolResponse)

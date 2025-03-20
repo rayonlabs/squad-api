@@ -30,11 +30,7 @@ HATE_SM = SessionManager(
     base_url="https://chutes-hate-speech-detector.chutes.ai",
 )
 TOKENIZER = transformers.AutoTokenizer.from_pretrained(
-    os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "bge-reranker-large"
-    )
+    os.path.join(os.path.dirname(__file__), "..", "bge-reranker-large")
 )
 
 

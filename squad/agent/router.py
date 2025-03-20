@@ -398,6 +398,10 @@ async def invoke_agent(
         public=public,
     )
     invocation.agent = agent
+    if "all" in user.limits.allowed_models:
+        invocation.queue_name = "squad-paid"
+    else:
+        invocation.queue_name = "squad-free"
     db.add(invocation)
     await db.commit()
     await settings.redis_client.xadd(
