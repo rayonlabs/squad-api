@@ -33,7 +33,8 @@ class DataUniverseSearcher(Tool):
         "limit": {
             "type": "integer",
             "nullable": True,
-            "default": 100,
+            "default": 25,
+            "description": "Number of search results to return.",
         },
         "top_n": {
             "type": "integer",
