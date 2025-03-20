@@ -3,6 +3,7 @@
 """
 
 import aiohttp
+from loguru import logger
 from sqlalchemy import select
 from typing import Optional
 from pydantic import BaseModel, Field, ValidationError, constr
@@ -99,7 +100,8 @@ class ToolValidator:
                 chute = await resp.json()
                 assert chute.get("standard_template") == template
                 assert chute.get("name") == name
-        except Exception:
+        except Exception as exc:
+            logger.info(f"Failed to fetch chute: {self.user=} {name=} {exc}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Could not find chute {name} with template {template}",

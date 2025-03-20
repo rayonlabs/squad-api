@@ -3,6 +3,7 @@ Router to handle tools.
 """
 
 import re
+from loguru import logger
 import squad.tool.builtin as builtin_tools
 from typing import Optional, Any
 from sqlalchemy import select, or_, func, exists
@@ -171,6 +172,10 @@ async def create_tool(
         tool = Tool(**args.model_dump())
         tool.user_id = user.user_id
     except ValueError as exc:
+        import traceback
+
+        logger.error(f"Validation error: {exc}\n{traceback.format_exc()}")
+        logger.error(args.model_dump())
         return HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),

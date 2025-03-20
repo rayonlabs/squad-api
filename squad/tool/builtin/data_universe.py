@@ -51,6 +51,7 @@ class DataUniverseSearcher(Tool):
             "description": "Date string in ISO 8601 format (YYYY-MM-DD) to filter results <=",
         },
     }
+    output_type = "string"
 
     def forward(
         self,

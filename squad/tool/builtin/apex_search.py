@@ -42,6 +42,7 @@ class ApexWebSearcher(Tool):
             "description": "Query timeout in seconds.",
         },
     }
+    output_type = "string"
 
     def forward(
         self,
