@@ -238,16 +238,20 @@ async def stream_invocation(
                 last_offset = offset.decode()
                 parts = last_offset.split("-")
                 last_offset = parts[0] + "-" + str(int(parts[1]) + 1)
+                log_data = None
                 try:
                     log_data = json.loads(data[b"data"])
-                    if log_data["log"] == "DONE":
+                    if log_data["log"] == "__INVOCATION_FINISHED__":
                         return
                 except Exception:
                     ...
-                if b'"log":"DONE"' in data[b"data"]:
+                if not log_data:
+                    log_data = {"log": str(data[b"data"])}
+                log_data["offset"] = last_offset
+                if b'"log":"__INVOCATION_FINISHED__"' in data[b"data"]:
                     await settings.redis_client.delete(invocation.stream_key)
                     return
-                yield f"data: {data[b'data'].decode()}\n\n"
+                yield f"data: {json.dumps(log_data).decode()}\n\n"
 
     return StreamingResponse(_stream())
 

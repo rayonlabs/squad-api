@@ -9,6 +9,7 @@ from urllib.parse import quote
 from contextlib import asynccontextmanager
 from loguru import logger
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
@@ -117,6 +118,25 @@ app.include_router(data_router, prefix="/data", tags=["Data"])
 app.include_router(account_router, prefix="/accounts", tags=["Account"])
 app.include_router(invocation_router, prefix="/invocations", tags=["Invocation"])
 app.include_router(x_router, prefix="/x", tags=["X"])
+
+# CORS
+origins = [
+    "http://localhost:5174",
+    "http://localhost:8000",
+    "http://sqd.lvh.me:8000",
+    "https://sqd.io",
+    "https://www.sqd.io",
+    "https://chutes.ai",
+    "https://squad-app.vercel.app",
+    "http://squad-app.vercel.app",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Ping endpoint for k8s probes.
 app.get("/ping")(lambda: {"message": "pong"})

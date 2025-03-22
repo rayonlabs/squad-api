@@ -256,7 +256,8 @@ async def update_agent(
         user.limits.max_execution_time,
     )
     args.default_max_steps = min(
-        args.default_max_steps or agent.default_max_steps or user.limits.max_steps
+        args.default_max_steps or agent.default_max_steps or user.limits.max_steps,
+        user.limits.max_steps,
     )
 
     tool_ids = []

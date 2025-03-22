@@ -90,7 +90,7 @@ async def perform_data_universe_search(
     authorization: str | None = Header(None, alias="Authorization"),
 ):
     await get_current_agent(issuer="squad")(request, authorization)
-    async with settings.data_universe_sm() as session:
+    async with settings.data_universe_sm.get_sessio() as session:
         async with session.post(
             "/api/v1/on_demand_data_request_test", json=search.model_dump()
         ) as resp:
@@ -104,7 +104,7 @@ async def perform_apx_web_search(
     authorization: str | None = Header(None, alias="Authorization"),
 ):
     await get_current_agent(issuer="squad")(request, authorization)
-    async with settings.apex_search_sm() as session:
+    async with settings.apex_search_sm.get_session() as session:
         async with session.post("/web_retrieval", json=search.model_dump()) as resp:
             return await resp.json()
 
