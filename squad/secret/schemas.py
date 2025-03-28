@@ -1,3 +1,8 @@
+"""
+Schemas for secrets.
+"""
+
+import re
 from sqlalchemy.sql import func
 from sqlalchemy import (
     Column,
@@ -8,6 +13,12 @@ from sqlalchemy import (
     Boolean,
 )
 from squad.database import Base, generate_uuid
+
+
+def is_valid_name(name):
+    if not isinstance(name, str) or not re.match(r"^([a-zA-Z0-9_\.-]{3,64})$", name, re.I):
+        return False
+    return True
 
 
 class BYOKSecret(Base):
