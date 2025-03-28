@@ -3,7 +3,7 @@ Pydantic models for storage requests (from agents).
 """
 
 from pydantic import BaseModel, Field, field_validator, model_validator, constr
-from typing import Optional, List, Dict, Literal
+from typing import Optional, List, Dict, Literal, Any
 from datetime import datetime
 from squad.storage.base import SUPPORTED_LANGUAGES
 
@@ -264,3 +264,20 @@ class ApexWebSearchParams(BaseModel):
     limit: int = Field(default=10, ge=1, le=50, description="Maximum number of results to return.")
     miners: int = Field(default=5, ge=1, le=10, description="Number of unique miners to query.")
     timeout: int = Field(default=10, ge=3, le=30, description="Maximum request timeout in seconds.")
+
+
+class BYOKBody(BaseModel):
+    type: str = constr(pattern=r"^(bytes|json)$")
+    value: Any
+
+
+class BYOKParams(BaseModel):
+    tool_name: str = Field(description="Name of the tool triggering the request.")
+    url: str = Field(
+        Description="URL to send the request tool, must match identically to the tool args."
+    )
+    method: Optional[str] = constr(pattern=r"^(post|put|get|head|patch|delete)$")
+    headers: Optional[dict[str, str]] = Field(
+        {}, description="Additional request headers to include in request."
+    )
+    body: Optional[BYOKBody] = Field(description="Request body to send upstream.")

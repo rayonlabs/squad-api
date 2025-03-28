@@ -144,6 +144,11 @@ def get_current_agent(issuer: str = "squad", scopes: list[str] = None):
                     .scalar_one_or_none()
                 )
                 if agent:
+                    if not agent.public and payload.get("sub") != agent.user_id:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid token.",
+                        )
                     return agent
         except jwt.InvalidTokenError:
             ...

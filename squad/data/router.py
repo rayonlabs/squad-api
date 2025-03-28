@@ -2,12 +2,19 @@
 Router to handle storage related tools (X search, brave search, memories CRD).
 """
 
+import jwt
+import aiohttp
+import pybase64 as base64
 from typing import Any
 from pydantic import ValidationError
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from sqlalchemy import select, func, or_, String
 from squad.auth import get_current_user, get_current_agent
 from squad.agent.schemas import get_by_id
+from squad.secret.schemas import BYOKSecret, BYOKSecretItem
 from squad.config import settings
+from squad.util import decrypt
+from squad.database import get_session
 from squad.data.schemas import (
     DataUniverseSearchParams,
     ApexWebSearchParams,
@@ -15,7 +22,9 @@ from squad.data.schemas import (
     XSearchParams,
     MemorySearchParams,
     MemoryArgs,
+    BYOKParams,
 )
+from squad.tool.schemas import Tool
 from squad.storage.x import search as x_search
 from squad.storage.x import Tweet
 from squad.storage.memory import Memory
@@ -107,6 +116,86 @@ async def perform_apx_web_search(
     async with settings.apex_search_sm.get_session() as session:
         async with session.post("/web_retrieval", json=search.model_dump()) as resp:
             return await resp.json()
+
+
+@router.post("/byok")
+async def perform_byok_request(
+    request_args: BYOKParams,
+    request: Request,
+    authorization: str | None = Header(None, alias="Authorization"),
+):
+    await get_current_agent(issuer="squad")(request, authorization)
+    payload = jwt.decode(authorization, options={"verify_signature": False})
+    user_id = payload.get("sub")
+
+    async with get_session() as db:
+        byok_secret = await db.execute(
+            select(BYOKSecret).where(
+                BYOKSecret.name == request_args.secret_name,
+                or_(
+                    BYOKSecret.public.is_(True),
+                    BYOKSecret.user_id == user_id,
+                ),
+            )
+        ).scalar_one_or_none()
+        if not byok_secret:
+            raise HTTPException(status_code=404, detail="Secret not found")
+        secret_item = await db.execute(
+            select(BYOKSecretItem).where(
+                BYOKSecretItem.secret_id == byok_secret.secret_id,
+                BYOKSecretItem.user_id == user_id,
+            )
+        ).scalar_one_or_none()
+        if not secret_item:
+            raise HTTPException(status_code=404, detail="Secret item not found")
+
+        # Validate URL, method, etc.
+        tool_query = select(Tool).where(
+            Tool.name == request_args.tool_name,
+            or_(Tool.public.is_(True), Tool.user_id == user_id),
+            func.jsonb_extract_path_text(Tool.tool_args, "upstream_url").cast(String)
+            == request_args.url,
+            func.jsonb_extract_path_text(Tool.tool_args, "method").cast(String)
+            == request_args.method,
+            func.jsonb_extract_path_text(Tool.tool_args, "secret_name").cast(String)
+            == request_args.secret_name,
+        )
+        tool = await db.execute(tool_query).scalar_one_or_none()
+        if not tool:
+            raise HTTPException(
+                status_code=403,
+                detail="No matching tool found for this request.",
+            )
+
+        # Generate the headers.
+        header_value = await decrypt(secret_item.encrypted_value, secret_type="byok")
+    try:
+        kwargs = {
+            "headers": {
+                **request_args.headers,
+                **{
+                    byok_secret.header_key: header_value,
+                },
+            },
+            "params": request_args.params,
+        }
+        if request_args.body:
+            if request_args.body.type == "bytes":
+                kwargs["body"] = base64.b64decode(request_args.body.value)
+            else:
+                kwargs["body"] = request_args.body.value
+        async with aiohttp.ClientSession(raise_for_status=False) as session:
+            async with getattr(session, request_args.method)(
+                request_args.url,
+                **kwargs,
+            ) as resp:
+                return {
+                    "headers": resp.headers,
+                    "body": base64.b64encode(await resp.read()).decode,
+                }
+
+    except Exception:
+        return {}
 
 
 @router.post("/memory/search")

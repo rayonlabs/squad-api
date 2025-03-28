@@ -14,6 +14,9 @@ import squad.util as util
 from squad.auth import generate_auth_token
 import squad.tool.builtin as builtin
 from squad.config import settings
+from squad.database import get_session
+from squad.secret.schemas import BYOKSecret
+from sqlalchemy import or_
 
 
 class ImageArgs(BaseModel):
@@ -62,6 +65,14 @@ class AgentCallerArgs(BaseModel):
     tool_description: Optional[str] = None
     tool_name: str = None
     public: Optional[bool] = True
+
+
+class BYOKArgs(BaseModel):
+    upstream_url: str
+    secret_name: str
+    method: Optional[str] = constr(pattern=r"^(post|put|get|head|patch|delete)$")
+    tool_name: Optional[str] = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+    tool_description: Optional[str] = None
 
 
 class ToolValidator:
@@ -181,6 +192,42 @@ class ToolValidator:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid agent caller definition: {agent_args.model_dump()}",
+        )
+
+    async def validate_byok_tool(self):
+        """
+        Validate "bring your own key" request tools.
+        """
+        try:
+            byok_args = BYOKArgs(**self.args.tool_args)
+            async with get_session() as session:
+                secret = (
+                    (
+                        await session.execute(
+                            select(BYOKSecret).where(
+                                BYOKSecret.name == byok_args.secret_name,
+                                or_(
+                                    BYOKSecret.user_id == self.user.user_id,
+                                    BYOKSecret.public.is_(True),
+                                ),
+                            )
+                        )
+                    )
+                    .unique()
+                    .scalar_one_or_none()
+                )
+                if not secret:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid BYOK tool: secret {byok_args.secret_name} not found",
+                    )
+                return
+        except Exception:
+            ...
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid BYOK tool defintion",
         )
 
     async def validate_memory_tool(self):
