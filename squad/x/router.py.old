@@ -69,11 +69,18 @@ class QuoteTweetRequest(BaseModel):
 async def get_oauth_url():
     oauth = oauth_handler()
     code_verifier = secrets.token_urlsafe(64)
+
+    # Get authorization URL with explicit code_verifier
     try:
+        # In newer Tweepy versions, you can directly pass the code_verifier
+        # This should create the code_challenge correctly for PKCE
         auth_url = oauth.get_authorization_url(code_verifier=code_verifier)
+        logger.info(f"Generated auth URL: {auth_url[:50]}...")
     except TypeError:
         try:
+            # Fall back to the method without parameters if the above fails
             auth_url = oauth.get_authorization_url()
+            logger.info(f"Generated auth URL (fallback): {auth_url[:50]}...")
         except Exception as e:
             logger.error(f"Failed to get authorization URL: {str(e)}")
             raise HTTPException(
@@ -86,6 +93,7 @@ async def get_oauth_url():
     state = secrets.token_urlsafe(32)
     if "state" in query_params and query_params["state"]:
         state = query_params["state"][0]
+        logger.info(f"Using existing state parameter from URL: {state}")
     else:
         logger.info(f"No state found in URL, generating new state: {state}")
         if "?" in auth_url:
@@ -94,6 +102,8 @@ async def get_oauth_url():
             auth_url += f"?state={state}"
 
     await settings.redis_client.set(f"xstate:{state}", code_verifier)
+    logger.info(f"Set code verifier to {code_verifier} for {state=} when {auth_url=}")
+
     return RedirectResponse(url=auth_url)
 
 
@@ -132,39 +142,40 @@ async def oauth_callback(
             detail="Invalid or expired authentication session state. Please try authenticating again.",
         )
     await settings.redis_client.delete(state)
+
+    # Pass the full callback URL AND the retrieved code_verifier to fetch_token
+    # The callback_url contains the 'code' parameter needed by fetch_token
     if isinstance(code_verifier, bytes):
         code_verifier = code_verifier.decode()
-    try:
-        access_token = oauth.fetch_token(callback_url)
-        client = tweepy.Client(access_token["access_token"])
-        user = client.get_me(user_auth=False)
-        user_id = str(user.data.id)
-        agent = (
-            (await db.execute(select(Agent).where(Agent.x_user_id == user_id)))
-            .unique()
-            .scalar_one_or_none()
-        )
-        if not agent:
-            logger.error(f"No agent found for X user ID: {user_id}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No agent found for X user ID {user_id}. Please ensure an agent profile exists with this X user ID before authenticating.",
-            )
-
-        agent.x_access_token = await encrypt(access_token["access_token"])
-        agent.x_refresh_token = await encrypt(access_token["refresh_token"])
-        agent.x_token_expires_at = access_token["expires_at"]
-        await db.commit()
-        await db.refresh(agent)
-        logger.info(
-            f"Successfully authenticated and updated tokens for agent {agent.agent_id} (X User ID: {user_id})"
-        )
-    except Exception as exc:
-        logger.warning(f"Error setting X auth credentials for agent: {exc}")
+    access_token = oauth.fetch_token(
+        authorization_response_url=callback_url,
+        code_verifier=code_verifier,
+    )
+    client = tweepy.Client(access_token["access_token"])
+    user = client.get_me(user_auth=False)
+    user_id = str(user.data.id)
+    agent = (
+        (await db.execute(select(Agent).where(Agent.x_user_id == user_id)))
+        .unique()
+        .scalar_one_or_none()
+    )
+    if not agent:
+        logger.error(f"No agent found for X user ID: {user_id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error setting X auth credentials for agent: {exc}",
+            detail=f"No agent found for X user ID {user_id}. Please ensure an agent profile exists with this X user ID before authenticating.",
         )
+
+    agent.x_access_token = await encrypt(access_token["access_token"])
+    agent.x_refresh_token = await encrypt(access_token["refresh_token"])
+    agent.x_token_expires_at = access_token["expires_at"]
+    await db.commit()
+    await db.refresh(agent)
+    logger.info(
+        f"Successfully authenticated and updated tokens for agent {agent.id} (X User ID: {user_id})"
+    )
+
+    # Redirect to a success page or the main app page
     return RedirectResponse(url=f"{settings.squad_base_url}")
 
 
