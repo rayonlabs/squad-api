@@ -171,7 +171,7 @@ class Settings(BaseSettings):
     )
 
     # Squad URLs.
-    squad_base_url: str = os.getenv("SQUAD_BASE_URL", "https://squad.game")
+    squad_base_url: str = os.getenv("SQUAD_BASE_URL", "https://sqd.io")
     squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://api:8000")
 
     # Tweet storage.

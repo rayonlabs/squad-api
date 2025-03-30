@@ -54,7 +54,6 @@ async def list_invocations(
     db: AsyncSession = Depends(get_db_session),
     agent_id: Optional[str] = None,
     agent_name: Optional[str] = None,
-    include_public: Optional[bool] = False,
     search: Optional[str] = None,
     limit: Optional[int] = 10,
     page: Optional[int] = 0,
@@ -64,20 +63,14 @@ async def list_invocations(
 ):
     current_user_id = user.user_id if user else None
     query = select(Invocation)
-    if include_public:
-        if user:
-            query = query.where(
-                or_(Invocation.user_id == current_user_id, Invocation.public.is_(True))
+    if mine:
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="You must authenticate to see your own private invocations.",
             )
         else:
-            query = query.where(Invocation.public.is_(True))
-    elif not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="You must authenticate to see your own private invocations.",
-        )
-    else:
-        query = query.where(Invocation.user_id == current_user_id)
+            query = query.where(Invocation.user_id == current_user_id)
     if agent_id:
         query = query.where(Invocation.agent_id == agent_id)
     if agent_name:
@@ -88,8 +81,6 @@ async def list_invocations(
         query = query.where(Invocation.task.ilike(f"%{search}%"))
     if user_id:
         query = query.where(Invocation.user_id == user_id)
-    if mine and user:
-        query = query.where(Invocation.user_id == user.user_id)
 
     # Perform a count.
     total_query = select(func.count()).select_from(query.subquery())
@@ -103,11 +94,21 @@ async def list_invocations(
         .limit((limit or 10))
     )
     result = await db.execute(query)
+    items = [InvocationResponse.from_orm(item) for item in result.unique().scalars().all()]
+    for item in items:
+        if not item.public and item.user_id != current_user_id:
+            item.invocation_id = "(private)"
+            item.task = "(private)"
+            item.source = "(private)"
+            item.inputs = []
+            item.outputs = []
+            item.answer = "(private)"
+            item.user_id = "(private)"
     return {
         "total": total,
         "page": page,
         "limit": limit,
-        "items": [InvocationResponse.from_orm(item) for item in result.unique().scalars().all()],
+        "items": items,
     }
 
 

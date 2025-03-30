@@ -125,6 +125,7 @@ async def create_secret(
         )
     try:
         secret = BYOKSecret(**args.model_dump())
+        secret.user_id = user.user_id
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -153,7 +154,7 @@ async def create_secret_item(
         user_id=user.user_id,
         encrypted_value=await encrypt(secret_args.value, secret_type="byok"),
     )
-    await db.add(item)
+    db.add(item)
     await db.commit()
     await db.refresh(item)
     return item

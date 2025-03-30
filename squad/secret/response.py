@@ -14,6 +14,7 @@ class BYOKSecretResponse(BaseModel):
     user_id: str
     public: bool
     created_at: datetime
+    url_patterns: list[str]
 
     class Config:
         from_attributes = True

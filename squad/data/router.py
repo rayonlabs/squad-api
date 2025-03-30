@@ -2,6 +2,7 @@
 Router to handle storage related tools (X search, brave search, memories CRD).
 """
 
+import re
 import jwt
 import aiohttp
 import pybase64 as base64
@@ -139,7 +140,7 @@ async def perform_byok_request(
             )
         ).scalar_one_or_none()
         if not byok_secret:
-            raise HTTPException(status_code=404, detail="Secret not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Secret not found")
         secret_item = await db.execute(
             select(BYOKSecretItem).where(
                 BYOKSecretItem.secret_id == byok_secret.secret_id,
@@ -147,23 +148,30 @@ async def perform_byok_request(
             )
         ).scalar_one_or_none()
         if not secret_item:
-            raise HTTPException(status_code=404, detail="Secret item not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Secret item not found"
+            )
+
+        # Ensure the URL matches the secret's allowed pattern.
+        patterns = [
+            pattern.replace(".", "\\.").replace("*", ".*") for pattern in byok_secret.url_patterns
+        ]
+        if not any([re.search(pattern, request_args.url, re.I) for pattern in patterns]):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Secret is not allowed for requested URL",
+            )
 
         # Validate URL, method, etc.
         tool_query = select(Tool).where(
             Tool.name == request_args.tool_name,
-            or_(Tool.public.is_(True), Tool.user_id == user_id),
-            func.jsonb_extract_path_text(Tool.tool_args, "upstream_url").cast(String)
-            == request_args.url,
-            func.jsonb_extract_path_text(Tool.tool_args, "method").cast(String)
-            == request_args.method,
             func.jsonb_extract_path_text(Tool.tool_args, "secret_name").cast(String)
             == request_args.secret_name,
         )
         tool = await db.execute(tool_query).scalar_one_or_none()
         if not tool:
             raise HTTPException(
-                status_code=403,
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="No matching tool found for this request.",
             )
 

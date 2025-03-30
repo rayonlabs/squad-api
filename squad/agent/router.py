@@ -431,7 +431,6 @@ async def invoke_agent(
 async def agent_list_invocations(
     db: AsyncSession = Depends(get_db_session),
     agent_id_or_name: Optional[str] = None,
-    include_public: Optional[bool] = False,
     search: Optional[str] = None,
     limit: Optional[int] = 10,
     page: Optional[int] = 0,
@@ -448,7 +447,6 @@ async def agent_list_invocations(
     return await list_invocations(
         db,
         agent_id=agent.agent_id,
-        include_public=include_public,
         search=search,
         limit=limit,
         page=page,

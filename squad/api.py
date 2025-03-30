@@ -19,6 +19,7 @@ from squad.tool.router import router as tool_router
 from squad.data.router import router as data_router
 from squad.account.router import router as account_router
 from squad.invocation.router import router as invocation_router
+from squad.secret.router import router as secret_router
 from squad.x.router import router as x_router
 from squad.database import Base, engine
 from squad.config import settings
@@ -117,6 +118,7 @@ app.include_router(tool_router, prefix="/tools", tags=["Tools"])
 app.include_router(data_router, prefix="/data", tags=["Data"])
 app.include_router(account_router, prefix="/accounts", tags=["Account"])
 app.include_router(invocation_router, prefix="/invocations", tags=["Invocation"])
+app.include_router(secret_router, prefix="/secrets", tags=["Secrets"])
 app.include_router(x_router, prefix="/x", tags=["X"])
 
 # CORS

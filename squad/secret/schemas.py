@@ -4,6 +4,7 @@ Schemas for secrets.
 
 import re
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy import (
     Column,
     String,
@@ -25,6 +26,7 @@ class BYOKSecret(Base):
     __tablename__ = "byok_secrets"
     secret_id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)
+    url_patterns = Column(ARRAY(String), nullable=False)
     description = Column(String, nullable=False)
     header_key = Column(String, nullable=False, default="Authorization")
     user_id = Column(String, nullable=False)
