@@ -90,25 +90,38 @@ class XTweeter(Tool):
     output_type = "string"
 
     def forward(self, text: str, in_reply_to: str = None, media: str = None):
-        form_data = {
-            "text": ("", text),
+        payload = {
+            "text": text,
         }
         if in_reply_to:
-            form_data["in_reply_to"] = ("", in_reply_to)
+            payload["in_reply_to"] = in_reply_to
+        request_args = {
+            "url": f"{settings.squad_api_base_url}/x/tweet",
+            "json": payload,
+            "headers": {"Authorization": settings.authorization},
+        }
         if media:
-            with open(media, "rb") as infile:
-                file_bytes = infile.read()
-                filename = os.path.basename(media)
-                form_data["media"] = (filename, file_bytes)
-        response = requests.post(
-            f"{settings.squad_api_base_url}/x/tweet",
-            data=form_data,
-            headers={
-                "Authorization": settings.authorization,
-            },
-        )
-        response.raise_for_status()
-        return f"Successfully tweeted: {response.text}"
+            if (
+                isinstance(media, str)
+                and os.path.exists(media)
+                and media.endswith(("png", "jpg", "jpeg", "gif", "mp4", "wav", "mp3", "webp"))
+            ):
+                base_name = os.path.basename(media)
+                payload["text"] += (
+                    f"\nhttps://api.sqd.io/invocations/{settings.invocation_id}/render/{base_name}"
+                )
+        response = requests.post(**request_args)
+        try:
+            response.raise_for_status()
+            return f"Successfully tweeted: {response.text}"
+        except requests.exceptions.HTTPError as err:
+            print(f"HTTP Error occurred: {err}")
+            print(f"Status Code: {err.response.status_code}")
+            print(f"Response Body: {err.response.text}")
+            raise err
+        except requests.exceptions.RequestException as e:
+            print(f"Other request error: {e}")
+            raise e
 
 
 class XFollower(Tool):

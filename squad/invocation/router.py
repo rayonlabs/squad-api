@@ -3,6 +3,7 @@ Router to handle invocations (except the actual creation/POST call).
 """
 
 import io
+import os
 import orjson as json
 import asyncio
 import traceback
@@ -171,6 +172,65 @@ async def get_invocation_output_file(
     return Response(
         content=data.getvalue(),
         headers={"Content-Disposition": f'attachment; filename="{Path(filename).name}"'},
+    )
+
+
+@router.get("/{invocation_id}/render/{filename:path}")
+async def render_output_file(
+    invocation_id: str,
+    filename: str,
+    db: AsyncSession = Depends(get_db_session),
+    user: Any = Depends(get_current_user(raise_not_found=False)),
+):
+    file_ext = Path(filename).suffix.lower()
+    content_type_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".mp4": "video/mp4",
+        ".mp3": "audio/mp3",
+        ".wav": "audio/wav",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".pdf": "application/pdf",
+        ".txt": "text/plain",
+    }
+    content_type = content_type_map.get(file_ext)
+    if not content_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This endpoint can only render certain file types.",
+        )
+
+    user_id = user.user_id if user else None
+    invocation = await _load_invocation(db, invocation_id, user_id)
+    if not invocation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Invocation {invocation_id} output file {filename} not found, or is not public",
+        )
+    target_output = None
+    for output in invocation.outputs:
+        if os.path.basename(output) == os.path.basename(filename):
+            target_output = output
+    if not target_output:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Invocation {invocation_id} output file {filename} not found, or is not public",
+        )
+    data = io.BytesIO()
+    async with settings.s3_client() as s3:
+        await s3.download_fileobj(settings.storage_bucket, target_output, data)
+    headers = {
+        "Content-Disposition": f'inline; filename="{Path(filename).name}"',
+        "Content-Type": content_type,
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    return Response(
+        content=data.getvalue(),
+        headers=headers,
     )
 
 

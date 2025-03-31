@@ -20,6 +20,7 @@ def set_agent(agent):
 
 class Settings(BaseSettings):
     agent_id: str = os.getenv("AGENT_ID", "test_agent")
+    invocation_id: str = os.getenv("INVOCATION_ID", "fakeid")
     authorization: Optional[str] = os.getenv("CHUTES_API_TOKEN")
     default_image_model: str = os.getenv("DEFAULT_IMAGE_MODEL", "FLUX.1-schnell")
     default_vlm_model: str = os.getenv(

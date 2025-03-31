@@ -259,7 +259,7 @@ class XMentionsProcessor:
                 for agent in agents:
                     try:
                         await self._check_mentions_for_agent(agent)
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(5)
                     except Exception as exc:
                         logger.error(f"Error processing agent {agent.agent_id}: {exc}")
                 async with self._index_lock:

@@ -28,7 +28,7 @@ def create_env_var_from_os(name: str, default=None):
     return None
 
 
-def get_environment_variables():
+def get_environment_variables(invocation_id):
     env_vars = []
     direct_vars = [
         "PYTHONWARNINGS",
@@ -77,6 +77,7 @@ def get_environment_variables():
     env_vars.append(client.V1EnvVar(name="SQUAD_API_BASE_URL", value="http://api:8000"))
     env_vars.append(client.V1EnvVar(name="COLUMNS", value="200"))
     env_vars.append(client.V1EnvVar(name="X_LIVE_MODE", value="true"))
+    env_vars.append(client.V1EnvVar(name="INVOCATION_ID", value=invocation_id))
     return env_vars
 
 
@@ -137,7 +138,7 @@ def create_invocation_job(mapper, connection, invocation):
                                 "--id",
                                 f"id:{invocation.invocation_id}",
                             ],
-                            env=get_environment_variables(),
+                            env=get_environment_variables(invocation.invocation_id),
                             volume_mounts=[
                                 client.V1VolumeMount(
                                     name="jwt-cert", mount_path="/etc/jwt-cert", read_only=True
@@ -186,6 +187,10 @@ def create_invocation_job(mapper, connection, invocation):
                                 client.V1EnvVar(
                                     name="NO_PROXY",
                                     value="api,api:8000,api.chutes.ai,*.chutes.ai,.chutes.ai,localhost,127.0.0.1,127.0.0.1:8000,api.squad,api.squad.svc.cluster.local,api.squad:8000,api.squad.svc.cluster.local:8000",
+                                ),
+                                client.V1EnvVar(
+                                    name="INVOCATION_ID",
+                                    value=invocation.invocation_id,
                                 ),
                             ],
                             volume_mounts=[

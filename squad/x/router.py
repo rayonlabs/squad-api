@@ -12,11 +12,11 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
 from squad.auth import get_current_agent
 from squad.config import settings
-from squad.util import encrypt, decrypt, contains_nsfw, contains_hate_speech
+from squad.util import encrypt, decrypt, contains_hate_speech
 from squad.database import get_db_session
 from squad.agent.schemas import Agent
 
@@ -24,6 +24,11 @@ router = APIRouter()
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 ALLOWED_VIDEO_TYPES = {"video/mp4"}
+
+
+class TweetPayload(BaseModel):
+    text: str
+    in_reply_to: int
 
 
 @lru_cache(maxsize=1)
@@ -207,52 +212,24 @@ async def get_agent_x_client(db: AsyncSession, agent: Agent):
 
 @router.post("/tweet")
 async def tweet(
-    text: str = Form(...),
-    in_reply_to: Optional[str] = Form(None),
-    media: Optional[UploadFile] = File(None),
+    tweet_payload: TweetPayload,
     agent: Agent = Depends(get_current_agent(scopes=["x"])),
     db: AsyncSession = Depends(get_db_session),
 ):
     # Block hate speech and NSFW media, otherwise allow.
-    if await contains_hate_speech([text]):
+    if await contains_hate_speech([tweet_payload.text]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Hate speech detected: {text}",
+            detail=f"Hate speech detected: {tweet_payload.text}",
         )
 
     client = await get_agent_x_client(db, agent)
-    try:
-        media_ids = []
-        if media:
-            if media.content_type not in ALLOWED_IMAGE_TYPES | ALLOWED_VIDEO_TYPES:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Unsupported media type: {media.content_type}",
-                )
-            is_image = media.content_type in ALLOWED_IMAGE_TYPES
-            file_bytes = await media.read()
-            if is_image:
-                if await contains_nsfw(file_bytes):
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="NSFW content detected in media: {media.filename}",
-                    )
-            else:
-                # XXX TODO filter videos...
-                logger.warning(f"TODO add checks for NSFW on {media.filename}")
-            media_obj = client.media_upload(
-                filename=media.filename, file=file_bytes, user_auth=False
-            )
-            media_ids.append(media_obj.media_id)
-        response = client.create_tweet(
-            text=text,
-            in_reply_to_tweet_id=in_reply_to,
-            media_ids=media_ids if media_ids else None,
-            user_auth=False,
-        )
-        return {"tweet_id": response.data["id"]}
-    except tweepy.TweepyException as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    response = client.create_tweet(
+        text=tweet_payload.text,
+        in_reply_to_tweet_id=tweet_payload.in_reply_to,
+        user_auth=False,
+    )
+    return {"tweet_id": response.data["id"]}
 
 
 @router.post("/follow")

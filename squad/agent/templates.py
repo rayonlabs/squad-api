@@ -30,6 +30,11 @@ agent = CodeAgent(
     prompt_templates=__tool_args["prompt_templates"],
     additional_authorized_imports=[
         "PIL",
+        "os",
+        "sys",
+        "re",
+        "base64",
+        "json",
         "requests",
         "io",
         "asyncio",
