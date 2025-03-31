@@ -28,6 +28,12 @@ class AgentArgs(BaseModel):
         settings.default_text_gen_model,
         description="The primary LLM to power the agent with.",
     )
+    # TODO: support external providers
+    # external_provider: Optional[str] = Field(
+    #     None,
+    #     description="Use an external LLM provider for agent logic.",
+    #     pattern=r"^(openai|anthropic|openrouter)$",
+    # )
     context_size: Optional[int] = Field(
         core_settings.default_context_size,
         description="Maximum context size (in tokens) of the primary agent LLM.",

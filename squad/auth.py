@@ -86,6 +86,11 @@ def get_current_user(
         request: Request,
         authorization: str | None = Header(None, alias="Authorization"),
     ):
+        if not authorization and raise_not_found:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token.",
+            )
         try:
             return await load_chute_user(authorization)
         except Exception as exc:
@@ -109,6 +114,11 @@ def get_current_agent(issuer: str = "squad", scopes: list[str] = None):
         """
         Helper to authenticate requests for agents.
         """
+        if not authorization:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token.",
+            )
         token = authorization.split(" ")[-1]
         payload = jwt.decode(token, options={"verify_signature": False})
         agent_id = payload.get("agent_id")

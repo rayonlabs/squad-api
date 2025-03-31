@@ -97,9 +97,11 @@ async def perform_x_search(
 async def perform_data_universe_search(
     search: DataUniverseSearchParams,
     request: Request,
+    current_user: Any = Depends(get_current_user(raise_not_found=False)),
     authorization: str | None = Header(None, alias="Authorization"),
 ):
-    await get_current_agent(issuer="squad")(request, authorization)
+    if not current_user:
+        await get_current_agent(issuer="squad")(request, authorization)
     async with settings.data_universe_sm.get_sessio() as session:
         async with session.post(
             "/api/v1/on_demand_data_request_test", json=search.model_dump()
@@ -111,9 +113,11 @@ async def perform_data_universe_search(
 async def perform_apx_web_search(
     search: ApexWebSearchParams,
     request: Request,
+    current_user: Any = Depends(get_current_user(raise_not_found=False)),
     authorization: str | None = Header(None, alias="Authorization"),
 ):
-    await get_current_agent(issuer="squad")(request, authorization)
+    if not current_user:
+        await get_current_agent(issuer="squad")(request, authorization)
     async with settings.apex_search_sm.get_session() as session:
         async with session.post("/web_retrieval", json=search.model_dump()) as resp:
             return await resp.json()

@@ -46,6 +46,8 @@ class Agent(Base):
     readme = Column(String, nullable=True)
     tagline = Column(String, nullable=False)
     model = Column(String, nullable=False)
+    # TODO: external LLM provider support for agent logic.
+    # external_provider = Column(String, nullable=True)
     user_id = Column(String, nullable=True)
     default_max_steps = Column(Integer, nullable=False, default=settings.default_max_steps)
     max_execution_time = Column(Integer, nullable=False)

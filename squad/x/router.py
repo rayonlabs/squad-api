@@ -10,7 +10,7 @@ from loguru import logger
 from functools import lru_cache
 from typing import Optional
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, status, Request
 from fastapi.responses import RedirectResponse
@@ -66,7 +66,7 @@ class QuoteTweetRequest(BaseModel):
 
 
 @router.get("/auth")
-async def get_oauth_url():
+async def get_oauth_url(redirect_path: Optional[str] = None):
     oauth = oauth_handler()
     code_verifier = secrets.token_urlsafe(64)
     try:
@@ -94,6 +94,8 @@ async def get_oauth_url():
             auth_url += f"?state={state}"
 
     await settings.redis_client.set(f"xstate:{state}", code_verifier)
+    if redirect_path:
+        await settings.redis_client.set(f"xredirect:{state}", redirect_path)
     return RedirectResponse(url=auth_url)
 
 
@@ -131,7 +133,10 @@ async def oauth_callback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired authentication session state. Please try authenticating again.",
         )
-    await settings.redis_client.delete(state)
+    await settings.redis_client.delete(f"xstate:{state}")
+    redirect_path = await settings.redis_client.get(f"xredirect:{state}")
+    if not redirect_path:
+        redirect_path = "/?x_auth_success=true"
     if isinstance(code_verifier, bytes):
         code_verifier = code_verifier.decode()
     try:
@@ -139,13 +144,20 @@ async def oauth_callback(
         client = tweepy.Client(access_token["access_token"])
         user = client.get_me(user_auth=False)
         user_id = str(user.data.id)
+        x_username = user.data.username
         agent = (
-            (await db.execute(select(Agent).where(Agent.x_user_id == user_id)))
+            (
+                await db.execute(
+                    select(Agent).where(
+                        or_(Agent.x_user_id == user_id, Agent.x_username == x_username)
+                    )
+                )
+            )
             .unique()
             .scalar_one_or_none()
         )
         if not agent:
-            logger.error(f"No agent found for X user ID: {user_id}")
+            logger.error(f"No agent found for X user ID: {user_id} username={x_username}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"No agent found for X user ID {user_id}. Please ensure an agent profile exists with this X user ID before authenticating.",
@@ -165,7 +177,7 @@ async def oauth_callback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error setting X auth credentials for agent: {exc}",
         )
-    return RedirectResponse(url=f"{settings.squad_base_url}")
+    return RedirectResponse(url=f"{settings.squad_base_url}{redirect_path}")
 
 
 async def get_agent_x_client(db: AsyncSession, agent: Agent):
