@@ -90,9 +90,6 @@ class XTweeter(Tool):
     output_type = "string"
 
     def forward(self, text: str, in_reply_to: str = None, media: str = None):
-        print(f"Trying to create a tweet:\n\t{text=}\n\t{media=}")
-        if not settings.x_live_mode:
-            return "Successfully tweeted: 234234"
         form_data = {
             "text": ("", text),
         }
@@ -105,7 +102,7 @@ class XTweeter(Tool):
                 form_data["media"] = (filename, file_bytes)
         response = requests.post(
             f"{settings.squad_api_base_url}/x/tweet",
-            files=form_data,
+            data=form_data,
             headers={
                 "Authorization": settings.authorization,
             },
@@ -126,8 +123,6 @@ class XFollower(Tool):
     output_type = "string"
 
     def forward(self, user_id: str):
-        if not settings.x_live_mode:
-            return f"Successfully followed {user_id=}"
         response = requests.post(
             f"{settings.squad_api_base_url}/x/follow",
             json={"user_id": user_id},
@@ -151,8 +146,6 @@ class XLiker(Tool):
     output_type = "string"
 
     def forward(self, tweet_id: str):
-        if not settings.x_live_mode:
-            return f"Successfully liked {tweet_id=}"
         response = requests.post(
             f"{settings.squad_api_base_url}/x/like",
             json={"tweet_id": tweet_id},
@@ -176,8 +169,6 @@ class XRetweeter(Tool):
     output_type = "string"
 
     def forward(self, tweet_id: str):
-        if not settings.x_live_mode:
-            return f"Successfully retweeted {tweet_id=}"
         response = requests.post(
             f"{settings.squad_api_base_url}/x/retweet",
             json={"tweet_id": tweet_id},
@@ -205,8 +196,6 @@ class XQuoteTweeter(Tool):
     output_type = "string"
 
     def forward(self, tweet_id: str, text: str):
-        if not settings.x_live_mode:
-            return f"Successfully quote tweeted {tweet_id=}"
         response = requests.post(
             f"{settings.squad_api_base_url}/x/like",
             json={"tweet_id": tweet_id, "text": text},

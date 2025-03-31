@@ -183,9 +183,13 @@ async def get_agent_x_client(db: AsyncSession, agent: Agent):
         )
 
     if time.time() > agent.x_token_expires_at:
+        # Reload agent.
+        agent = (await db.execute(select(Agent).where(Agent.agent_id == agent.agent_id))).unique().scalar_one_or_none()
         oauth = oauth_handler()
         new_token = oauth.refresh_token(
+            token_url="https://api.x.com/2/oauth2/token",
             client_id=settings.x_client_id,
+            client_secret=settings.x_client_secret,
             refresh_token=await decrypt(agent.x_refresh_token),
         )
         agent.x_access_token = await encrypt(new_token["access_token"])

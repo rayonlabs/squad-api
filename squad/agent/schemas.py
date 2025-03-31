@@ -39,6 +39,13 @@ def is_valid_name(name):
     return True
 
 
+class AgentXInteraction(Base):
+    __tablename__ = "agent_x_interactions"
+    agent_id = Column(String, primary_key=True, default=generate_uuid)
+    tweet_id = Column(String, nullable=False, primary_key=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Agent(Base):
     __tablename__ = "agents"
     agent_id = Column(String, primary_key=True, default=generate_uuid)
@@ -125,15 +132,16 @@ class Agent(Base):
             "tools": {},
         }
         if source == "x":
-            config_map["system_prompt"] += "\n" + self.sys_x_prompt or DEFAULT_X_ADDENDUM.replace(
-                "USERNAME", self.x_username
-            )
+            addendum = self.sys_x_prompt
+            if not addendum:
+                addendum = DEFAULT_X_ADDENDUM.replace("USERNAME", self.x_username)
+            prompt_templates["system_prompt"] += "\n" + addendum
         elif source == "api":
             if self.sys_api_prompt:
-                config_map["system_prompt"] += "\n" + self.sys_api_prompt
+                prompt_templates["system_prompt"] += "\n" + self.sys_api_prompt
         else:
             if self.sys_schedule_prompt:
-                config_map["system_prompt"] += "\n" + self.sys_schedule_prompt
+                prompt_templates["system_prompt"] += "\n" + self.sys_schedule_prompt
         if max_steps:
             config_map["max_steps"] = max_steps
         elif self.default_max_steps:

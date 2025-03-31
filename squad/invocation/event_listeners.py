@@ -76,6 +76,7 @@ def get_environment_variables():
             env_vars.append(create_env_var_from_secret(env_name, secret_name, secret_key))
     env_vars.append(client.V1EnvVar(name="SQUAD_API_BASE_URL", value="http://api:8000"))
     env_vars.append(client.V1EnvVar(name="COLUMNS", value="200"))
+    env_vars.append(client.V1EnvVar(name="X_LIVE_MODE", value="true"))
     return env_vars
 
 
