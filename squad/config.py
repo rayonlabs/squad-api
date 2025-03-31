@@ -141,17 +141,15 @@ class Settings(BaseSettings):
     chutes_sm: SessionManager = SessionManager(
         base_url=os.getenv("CHUTES_API_URL", "https://api.chutes.ai"),
     )
-    data_universe_sm: Optional[SessionManager] = SessionManager(
+    data_universe_sm: Optional[SessionManager] = (
         SessionManager(
             headers={"X-API-KEY": os.getenv("DATA_UNIVERSE_API_KEY")},
-            base_url=os.getenv(
-                "DATA_UNIVERSE_BASE_URL", "http://sn13-test.api.macrocosmos.ai:8000"
-            ),
+            base_url=os.getenv("DATA_UNIVERSE_BASE_URL", "https://sn13.api.macrocosmos.ai"),
         )
         if os.getenv("DATA_UNIVERSE_API_KEY")
         else None
     )
-    apex_search_sm: Optional[SessionManager] = SessionManager(
+    apex_search_sm: Optional[SessionManager] = (
         SessionManager(
             headers={"Authorization": os.getenv("APEX_SEARCH_API_KEY")},
             base_url=os.getenv("APEX_SEARCH_BASE_URL", "https://sn1.api.macrocosmos.ai"),

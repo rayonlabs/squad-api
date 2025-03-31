@@ -68,22 +68,28 @@ async def _load_tools(db, tool_ids, user_id):
 async def populate_x_account(db, agent):
     if agent.x_user_id and agent.x_username:
         return
-    if agent.x_user_id:
-        users = await get_users_by_id([agent.x_user_id])
-        if not users or not users.get(agent.x_user_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Could not load X user account with user_id={agent.x_user_id}",
-            )
-        agent.x_username = users[agent.x_user_id]["username"]
-    elif agent.x_username:
-        users = await get_users([agent.x_username])
-        if not users or not users.get(agent.x_username):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Could not load X user account with username={agent.x_username}",
-            )
-        agent.x_user_id = str(users[agent.x_username]["id"])
+    try:
+        if agent.x_user_id:
+            users = await get_users_by_id([agent.x_user_id])
+            if not users or not users.get(agent.x_user_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Could not load X user account with user_id={agent.x_user_id}",
+                )
+            agent.x_username = users[agent.x_user_id]["username"]
+        elif agent.x_username:
+            users = await get_users([agent.x_username])
+            if not users or not users.get(agent.x_username):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Could not load X user account with username={agent.x_username}",
+                )
+            agent.x_user_id = str(users[agent.x_username]["id"])
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not load the specified X user account",
+        )
 
 
 @router.get("", response_model=PaginatedAgents)

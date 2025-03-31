@@ -83,16 +83,7 @@ async def get_oauth_url(redirect_path: Optional[str] = None):
 
     parsed_url = urlparse(auth_url)
     query_params = parse_qs(parsed_url.query)
-    state = secrets.token_urlsafe(32)
-    if "state" in query_params and query_params["state"]:
-        state = query_params["state"][0]
-    else:
-        logger.info(f"No state found in URL, generating new state: {state}")
-        if "?" in auth_url:
-            auth_url += f"&state={state}"
-        else:
-            auth_url += f"?state={state}"
-
+    state = query_params["state"][0]
     await settings.redis_client.set(f"xstate:{state}", code_verifier)
     if redirect_path:
         await settings.redis_client.set(f"xredirect:{state}", redirect_path)
@@ -108,7 +99,7 @@ async def oauth_callback(
     error: Optional[str] = None,
 ):
     oauth = oauth_handler()
-    callback_url = str(request.url)
+    callback_url = request.url._url
     if error:
         error_description = request.query_params.get(
             "error_description", "No description provided."
@@ -149,7 +140,7 @@ async def oauth_callback(
             (
                 await db.execute(
                     select(Agent).where(
-                        or_(Agent.x_user_id == user_id, Agent.x_username == x_username)
+                        or_(Agent.x_user_id == user_id, Agent.x_username.ilike(x_username))
                     )
                 )
             )

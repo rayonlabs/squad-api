@@ -7,6 +7,7 @@ import jwt
 import aiohttp
 import pybase64 as base64
 from typing import Any
+from datetime import datetime
 from pydantic import ValidationError
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select, func, or_, String
@@ -97,15 +98,15 @@ async def perform_x_search(
 async def perform_data_universe_search(
     search: DataUniverseSearchParams,
     request: Request,
-    current_user: Any = Depends(get_current_user(raise_not_found=False)),
     authorization: str | None = Header(None, alias="Authorization"),
 ):
-    if not current_user:
-        await get_current_agent(issuer="squad")(request, authorization)
-    async with settings.data_universe_sm.get_sessio() as session:
-        async with session.post(
-            "/api/v1/on_demand_data_request_test", json=search.model_dump()
-        ) as resp:
+    await get_current_agent(issuer="squad")(request, authorization)
+    payload = search.model_dump()
+    for key, v in payload.items():
+        if isinstance(v, datetime):
+            payload[key] = v.isoformat()
+    async with settings.data_universe_sm.get_session() as session:
+        async with session.post("/api/v1/on_demand_data_request", json=payload) as resp:
             return await resp.json()
 
 
@@ -113,13 +114,15 @@ async def perform_data_universe_search(
 async def perform_apx_web_search(
     search: ApexWebSearchParams,
     request: Request,
-    current_user: Any = Depends(get_current_user(raise_not_found=False)),
     authorization: str | None = Header(None, alias="Authorization"),
 ):
-    if not current_user:
-        await get_current_agent(issuer="squad")(request, authorization)
+    await get_current_agent(issuer="squad")(request, authorization)
+    payload = search.model_dump()
+    for key, v in payload.items():
+        if isinstance(v, datetime):
+            payload[key] = v.isoformat()
     async with settings.apex_search_sm.get_session() as session:
-        async with session.post("/web_retrieval", json=search.model_dump()) as resp:
+        async with session.post("/web_retrieval", json=payload) as resp:
             return await resp.json()
 
 
