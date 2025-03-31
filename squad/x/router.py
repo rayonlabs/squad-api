@@ -5,7 +5,7 @@ Router for X interactions.
 import time
 import tweepy
 import secrets
-from urllib.parse import urlparse, parse_qs
+from yarl import URL
 from loguru import logger
 from functools import lru_cache
 from typing import Optional
@@ -81,9 +81,8 @@ async def get_oauth_url(redirect_path: Optional[str] = None):
                 detail="Failed to create authorization URL",
             )
 
-    parsed_url = urlparse(auth_url)
-    query_params = parse_qs(parsed_url.query)
-    state = query_params["state"][0]
+    parsed_url = URL(auth_url)
+    state = parsed_url.query.get("state")
     await settings.redis_client.set(f"xstate:{state}", code_verifier)
     if redirect_path:
         await settings.redis_client.set(f"xredirect:{state}", redirect_path)
@@ -130,6 +129,12 @@ async def oauth_callback(
         redirect_path = "/?x_auth_success=true"
     if isinstance(code_verifier, bytes):
         code_verifier = code_verifier.decode()
+    parsed_url = URL(callback_url)
+    if "code_verifier" not in parsed_url.query:
+        callback_url = str(
+            parsed_url.update_query({"code_verifier": code_verifier, **dict(parsed_url.query)})
+        )
+        logger.info(f"Updated callback URL to include {code_verifier=}")
     try:
         access_token = oauth.fetch_token(callback_url)
         client = tweepy.Client(access_token["access_token"])

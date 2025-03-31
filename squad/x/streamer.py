@@ -115,6 +115,7 @@ class XR:
         self._tweet_batch = []
         self._last_indexed = time.time()
         self._index_lock = asyncio.Lock()
+        self._connection_lock = asyncio.Lock()
         self.stream: AsyncStreamingClient | None = None
 
     async def start(self):
@@ -124,12 +125,13 @@ class XR:
         if self.running:
             return
         self.running = True
-        self.stream = AsyncStreamingClient(
-            bearer_token=settings.tweepy_client.bearer_token, wait_on_rate_limit=True
-        )
-        await self._sync_rules()
-        asyncio.create_task(self._monitor_changes())
-        await self._start_stream()
+        async with self._connection_lock:
+            self.stream = AsyncStreamingClient(
+                bearer_token=settings.tweepy_client.bearer_token, wait_on_rate_limit=False
+            )
+            await self._sync_rules()
+            asyncio.create_task(self._monitor_changes())
+            await self._start_stream()
 
     async def _monitor_changes(self):
         """
@@ -144,8 +146,19 @@ class XR:
         Stop the stream listener.
         """
         self.running = False
+        await self._safely_disconnect()
+
+    async def _safely_disconnect(self):
+        """
+        Safely disconnect the stream if it exists.
+        """
         if self.stream:
-            await self.stream.disconnect()
+            try:
+                await self.stream.disconnect()
+            except Exception as e:
+                logger.error(f"Error disconnecting stream: {e}")
+            finally:
+                self.stream = None
 
     async def _get_active_usernames(self) -> Set[str]:
         """
@@ -165,6 +178,10 @@ class XR:
         """
         Keep the X API stream rules up-to-date.
         """
+        if not self.stream:
+            logger.warning("Cannot sync rules: stream client is not initialized")
+            return
+
         try:
             current_rules = await self.stream.get_rules()
             rule_map = {}
@@ -174,7 +191,7 @@ class XR:
             db_usernames = await self._get_active_usernames()
             rules_to_add = ({f"@{u}" for u in db_usernames} | STATIC_RULES) - current_rule_values
             rules_to_remove = current_rule_values - ({f"@{u}" for u in db_usernames} | STATIC_RULES)
-            for rule in rules_to_remove:
+            if rules_to_remove:
                 await self.stream.delete_rules([rule_map[rule] for rule in rules_to_remove])
             if rules_to_add:
                 await self.stream.add_rules([StreamRule(rule) for rule in rules_to_add])
@@ -250,23 +267,77 @@ class XR:
 
         async def on_error(error):
             logger.error(f"X stream error: {error}")
-            if self.running:
-                await asyncio.sleep(5)
-                self.stream = AsyncStreamingClient(
-                    bearer_token=settings.tweepy_client.bearer_token, wait_on_rate_limit=True
+            if not self.running:
+                return
+            backoff_time = 30
+            max_retries = 5
+            retries = 0
+            while self.running and retries < max_retries:
+                logger.info(
+                    f"Attempting to reconnect in {backoff_time} seconds (attempt {retries+1}/{max_retries})"
                 )
-                await self._start_stream()
+                await asyncio.sleep(backoff_time)
+                async with self._connection_lock:
+                    logger.info("Attempting safe disconnect...")
+                    await self._safely_disconnect()
+                    logger.info("Safe disconnect finished. Attempting to create new client...")
+                    try:
+                        self.stream = AsyncStreamingClient(
+                            bearer_token=settings.tweepy_client.bearer_token,
+                            wait_on_rate_limit=False,
+                        )
+                        self.stream.on_tweet = on_tweet
+                        self.stream.on_error = on_error
+                        logger.info("New client created. Syncing rules...")
+
+                        # Purge the stream rules to see if it clears out any stray connections on X side.
+                        current_rules = await self.stream.get_rules()
+                        all_rules = [rule.id for rule in current_rules.data]
+                        logger.warning(f"Purging {len(all_rules)} rules from stream...")
+                        await self.stream.delete_rules(all_rules)
+                        logger.warning(f"Waiting, then re-creating stream rules.")
+                        await asyncio.sleep(30)
+                        await self._sync_rules()
+                        logger.info("Rules synced. Starting filter...")
+                        await self.stream.filter(
+                            tweet_fields=[
+                                "author_id",
+                                "entities",
+                                "public_metrics",
+                                "attachments",
+                            ]
+                        )
+                        logger.info("Successfully reconnected to X stream")
+                        return
+                    except Exception as exc:
+                        logger.error(f"Failed to reconnect during attempt {retries+1}: {exc}")
+                        retries += 1
+                        backoff_time = min(300, backoff_time * 2)
+
+            if retries >= max_retries:
+                logger.critical(
+                    "Failed to reconnect after maximum retries, stopping X stream service"
+                )
+                self.running = False
+
+        if not self.stream:
+            logger.error("Cannot start stream: stream client is not initialized")
+            return
 
         self.stream.on_tweet = on_tweet
         self.stream.on_error = on_error
-        await self.stream.filter(
-            tweet_fields=[
-                "author_id",
-                "entities",
-                "public_metrics",
-                "attachments",
-            ]
-        )
+        self.stream.on_request_error = on_error
+        try:
+            await self.stream.filter(
+                tweet_fields=[
+                    "author_id",
+                    "entities",
+                    "public_metrics",
+                    "attachments",
+                ]
+            )
+        except Exception as e:
+            logger.error(f"Error starting stream: {e}")
 
 
 async def main():

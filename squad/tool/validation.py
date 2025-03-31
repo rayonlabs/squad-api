@@ -19,10 +19,16 @@ from squad.secret.schemas import BYOKSecret
 from sqlalchemy import or_
 
 
-class ImageArgs(BaseModel):
+class BaseArgs(BaseModel):
+    model_config = {"none_as_default": True}
+
+
+class ImageArgs(BaseArgs):
     model: str
     tool_name: Optional[str] = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    tool_description: Optional[str] = None
+    tool_description: Optional[str] = Field(
+        None, description="Tool description provided to agent LLM"
+    )
     height: int = Field(1024, ge=128, le=2048)
     width: int = Field(1024, ge=128, le=2048)
     num_inference_steps: int = Field(25, ge=1, le=50)
@@ -30,49 +36,67 @@ class ImageArgs(BaseModel):
     seed: Optional[int] = 42
 
     # Some models support these.
-    negative_prompt: Optional[str] = None
-    image_b64: Optional[list[str]] = None
+    negative_prompt: Optional[str] = Field(
+        None, description="Negative prompt to use when generating"
+    )
+    image_b64: Optional[list[str]] = Field(
+        None, description="Optional input image in base64, when supported"
+    )
     img_guidance_scale: Optional[float] = Field(None, ge=1.0, le=20.0)
 
 
-class LLMArgs(BaseModel):
+class LLMArgs(BaseArgs):
     model: str
     tool_name: Optional[str] = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    tool_description: Optional[str] = None
+    tool_description: Optional[str] = Field(
+        None, description="Tool description provided to agent LLM"
+    )
     endpoint: Optional[str] = Field(None, enum=["chat", "completion"])
-    system_prompt: Optional[str] = None
+    system_prompt: Optional[str] = Field(
+        None, description="System prompt to use when calling the LLM"
+    )
     temperature: float = Field(0.7, ge=0.0, le=3.0)
 
 
-class TTSArgs(BaseModel):
+class TTSArgs(BaseArgs):
     voice: str
     slug: constr(pattern="^[a-z0-9-]+$") = "chutes-kokoro-82m"
     tool_name: Optional[str] = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    tool_description: Optional[str] = None
+    tool_description: Optional[str] = Field(
+        None, description="Tool description provided to agent LLM"
+    )
 
 
-class MemoryArgs(BaseModel):
-    static_session_id: str = None
+class MemoryArgs(BaseArgs):
+    static_session_id: Optional[str] = Field(
+        None, description="Optional static session ID to segment memories"
+    )
     tool_name: Optional[str] = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    tool_description: Optional[str] = None
+    tool_description: Optional[str] = Field(
+        None, description="Tool description provided to agent LLM"
+    )
 
 
 class VLMArgs(LLMArgs): ...
 
 
-class AgentCallerArgs(BaseModel):
+class AgentCallerArgs(BaseArgs):
     agent: str
-    tool_description: Optional[str] = None
-    tool_name: str = None
+    tool_description: Optional[str] = Field(
+        None, description="Tool description provided to agent LLM"
+    )
+    tool_name: str = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
     public: Optional[bool] = True
 
 
-class BYOKArgs(BaseModel):
+class BYOKArgs(BaseArgs):
     upstream_url: str
     secret_name: str
     method: Optional[str] = constr(pattern=r"^(post|put|get|head|patch|delete)$")
     tool_name: Optional[str] = constr(pattern=r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-    tool_description: Optional[str] = None
+    tool_description: Optional[str] = Field(
+        None, description="Tool description provided to agent LLM"
+    )
 
 
 class ToolValidator:

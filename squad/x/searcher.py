@@ -16,6 +16,7 @@ from squad.storage.x import (
 FIFTEEN_MINUTES = 15 * 60
 SEARCH_LIMIT = 300
 READ_LIMIT = 500
+ERROR_EXPIRATION = 600
 
 
 async def update_index():
@@ -27,22 +28,35 @@ async def update_index():
         agents = (await db.execute(select(Agent))).unique().scalars().all()
 
         for agent in agents:
-            # NOTE duplicates don't matter here since the X module skips
-            # requests with the same params in short time spans.
             for search in agent.x_searches or []:
-                search_key = "x:searchfail:" + str(
+                search_error_key = "x:sfail:" + str(
                     uuid.uuid5(uuid.NAMESPACE_OID, f"{agent.agent_id}:{search}")
                 )
-                fail_count = await settings.redis_client.get(search_key)
+                fail_count = await settings.redis_client.get(search_error_key)
                 if fail_count:
                     try:
                         fail_count = int(fail_count)
                     except ValueError:
-                        await settings.redis_client.delete(search_key)
-                        fail_count = 0
+                        try:
+                            await settings.redis_client.delete(search_error_key)
+                            fail_count = 0
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to delete Redis key: {search_error_key}, error: {e}"
+                            )
+                            continue
                     if fail_count >= 3:
                         logger.warning(f"Skipping bad search: {search} {fail_count=}")
-                        await settings.redis_client.expire(search_key, 600)
+                        try:
+                            expire_result = await settings.redis_client.expire(
+                                search_error_key, ERROR_EXPIRATION
+                            )
+                            if not expire_result:
+                                logger.warning(f"Failed to set expiration for {search_error_key}")
+                        except Exception as e:
+                            logger.error(
+                                f"Exception setting expiration for {search_error_key}: {e}"
+                            )
                         continue
 
                 # Check if we should rate limit first (without incrementing)
@@ -53,9 +67,6 @@ async def update_index():
 
                 # Increment rate limit counters.
                 await rate_limit("x_search", SEARCH_LIMIT, FIFTEEN_MINUTES)
-                search_key = "x:searchfail:" + str(
-                    uuid.uuid5(uuid.NAMESPACE_OID, f"{agent.agent_id}:{search}")
-                )
 
                 # Perform the actual search and index the tweets.
                 auth = "Bearer " + generate_auth_token(
@@ -67,7 +78,18 @@ async def update_index():
                     logger.warning(
                         f"Failed performing search: {search}\nException was: {exc}\n{traceback.format_exc()}"
                     )
-                    await settings.redis_client.incr(search_key)
+                    try:
+                        pipe = settings.redis_client.pipeline()
+                        pipe.incr(search_error_key)
+                        pipe.expire(search_error_key, ERROR_EXPIRATION)
+                        await pipe.execute()
+                        ttl = await settings.redis_client.ttl(search_error_key)
+                        if ttl <= 0:
+                            logger.warning(f"Key {search_error_key} has no valid TTL: {ttl}")
+                            await settings.redis_client.expire(search_error_key, ERROR_EXPIRATION)
+                    except Exception as e:
+                        logger.error(f"Failed to handle Redis operations for error key: {e}")
+                    continue
 
                 # Update rate limit counters again...
                 incr_by = indexed
@@ -84,8 +106,11 @@ async def main():
     Main loop forever.
     """
     while True:
-        logger.info("Updating agent X searches...")
-        await update_index()
+        try:
+            logger.info("Updating agent X searches...")
+            await update_index()
+        except Exception as e:
+            logger.error(f"Error in main update loop: {e}\n{traceback.format_exc()}")
         await asyncio.sleep(60)
 
 
