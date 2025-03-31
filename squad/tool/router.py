@@ -3,6 +3,7 @@ Router to handle tools.
 """
 
 import re
+from pydantic import BaseModel, Field
 from loguru import logger
 import squad.tool.builtin as builtin_tools
 from typing import Optional, Any
@@ -32,6 +33,18 @@ TOOL_MAP = {
     "image_tool": ImageArgs,
     "tts_tool": TTSArgs,
 }
+
+
+class ToolUpdateArgs(BaseModel):
+    description: Optional[str] = Field(
+        None,
+        description="Human readable description of the function",
+    )
+    tool_args: Optional[dict] = Field(
+        None,
+        description="Arguments for the tool",
+    )
+    public: Optional[bool] = Field(None, description="Public tool")
 
 
 class PaginatedTools(PaginatedResponse):
@@ -181,6 +194,41 @@ async def create_tool(
             detail=str(exc),
         )
     db.add(tool)
+    await db.commit()
+    await db.refresh(tool)
+    return tool
+
+
+@router.put("/{tool_id}", response_model=ToolResponse)
+async def update_tool(
+    tool_id: str,
+    args: ToolUpdateArgs,
+    db: AsyncSession = Depends(get_db_session),
+    user: Any = Depends(get_current_user()),
+):
+    tool = await _load_tool(db, tool_id, user.user_id)
+    if not tool or tool.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tool {tool_id} not found, or does not belong to you.",
+        )
+    update_data = args.model_dump(exclude_unset=True, exclude_none=True)
+    if "tool_args" in update_data:
+        update_data["tool_args"]["tool_name"] = tool.name
+        if "description" in update_data and "tool_description" not in update_data["tool_args"]:
+            update_data["tool_args"]["tool_description"] = update_data["description"]
+        validator_args = ToolArgs(
+            name=tool.name,
+            description=update_data.get("description", tool.description),
+            template=tool.template,
+            code=tool.code,
+            public=args.public,
+            tool_args=update_data["tool_args"],
+        )
+        validator = ToolValidator(db, validator_args, user)
+        await validator.validate()
+    for key, value in update_data.items():
+        setattr(tool, key, value)
     await db.commit()
     await db.refresh(tool)
     return tool

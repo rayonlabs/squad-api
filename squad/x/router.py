@@ -184,7 +184,11 @@ async def get_agent_x_client(db: AsyncSession, agent: Agent):
 
     if time.time() > agent.x_token_expires_at:
         # Reload agent.
-        agent = (await db.execute(select(Agent).where(Agent.agent_id == agent.agent_id))).unique().scalar_one_or_none()
+        agent = (
+            (await db.execute(select(Agent).where(Agent.agent_id == agent.agent_id)))
+            .unique()
+            .scalar_one_or_none()
+        )
         oauth = oauth_handler()
         new_token = oauth.refresh_token(
             token_url="https://api.x.com/2/oauth2/token",
@@ -236,10 +240,15 @@ async def tweet(
             else:
                 # XXX TODO filter videos...
                 logger.warning(f"TODO add checks for NSFW on {media.filename}")
-            media_obj = client.media_upload(filename=media.filename, file=file_bytes)
+            media_obj = client.media_upload(
+                filename=media.filename, file=file_bytes, user_auth=False
+            )
             media_ids.append(media_obj.media_id)
         response = client.create_tweet(
-            text=text, in_reply_to_tweet_id=in_reply_to, media_ids=media_ids if media_ids else None
+            text=text,
+            in_reply_to_tweet_id=in_reply_to,
+            media_ids=media_ids if media_ids else None,
+            user_auth=False,
         )
         return {"tweet_id": response.data["id"]}
     except tweepy.TweepyException as exc:
@@ -254,7 +263,7 @@ async def follow(
 ):
     client = await get_agent_x_client(db, agent)
     try:
-        response = client.follow_user(request.user_id)
+        response = client.follow_user(request.user_id, user_auth=False)
         return {"success": True, "following": response.data["following"]}
     except tweepy.TweepyException as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -268,7 +277,7 @@ async def like(
 ):
     client = await get_agent_x_client(db, agent)
     try:
-        response = client.like(request.tweet_id)
+        response = client.like(request.tweet_id, user_auth=False)
         return {"success": True, "liked": response.data["liked"]}
     except tweepy.TweepyException as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -282,7 +291,7 @@ async def retweet(
 ):
     client = await get_agent_x_client(db, agent)
     try:
-        response = client.retweet(request.tweet_id)
+        response = client.retweet(request.tweet_id, user_auth=False)
         return {"success": True, "retweeted": response.data["retweeted"]}
     except tweepy.TweepyException as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -302,8 +311,7 @@ async def quote_tweet(
     client = await get_agent_x_client(db, agent)
     try:
         response = client.create_tweet(
-            text=request.text,
-            quote_tweet_id=request.tweet_id,
+            text=request.text, quote_tweet_id=request.tweet_id, user_auth=False
         )
         return {"tweet_id": response.data["id"]}
     except tweepy.TweepyException as exc:
