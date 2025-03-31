@@ -23,7 +23,7 @@ setuptools = "^75.3.0"
 pillow = "^11.0.0"
 jinja2 = "^3.1.4"
 pyjwt = "^2.10.1"
-tweepy = "^4.14.0"
+tweepy = "4.15.0"
 langdetect = "^1.0.9"
 opensearch-py = {extras = ["async"], version = "^2.8.0"}
 redis = "^5.2.1"

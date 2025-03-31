@@ -125,13 +125,21 @@ class XR:
         if self.running:
             return
         self.running = True
-        async with self._connection_lock:
-            self.stream = AsyncStreamingClient(
-                bearer_token=settings.tweepy_client.bearer_token, wait_on_rate_limit=False
-            )
-            await self._sync_rules()
-            asyncio.create_task(self._monitor_changes())
-            await self._start_stream()
+        self.stream = AsyncStreamingClient(
+            bearer_token=settings.tweepy_client.bearer_token, wait_on_rate_limit=True
+        )
+        # Purge the stream rules to see if it clears out any stray connections on X side.
+        try:
+            current_rules = await self.stream.get_rules()
+            all_rules = [rule.id for rule in current_rules.data]
+            if all_rules:
+                logger.warning(f"Purging {len(all_rules)} rules from stream...")
+                await self.stream.delete_rules(all_rules)
+        except Exception as exc:
+            logger.error(f"Error resetting stream rules: {exc}")
+        await self._sync_rules()
+        asyncio.create_task(self._monitor_changes())
+        await self._start_stream()
 
     async def _monitor_changes(self):
         """
@@ -154,7 +162,7 @@ class XR:
         """
         if self.stream:
             try:
-                await self.stream.disconnect()
+                self.stream.disconnect()
             except Exception as e:
                 logger.error(f"Error disconnecting stream: {e}")
             finally:
@@ -272,47 +280,50 @@ class XR:
             backoff_time = 30
             max_retries = 5
             retries = 0
+            await self._safely_disconnect()
+            self.stream = None
             while self.running and retries < max_retries:
                 logger.info(
                     f"Attempting to reconnect in {backoff_time} seconds (attempt {retries+1}/{max_retries})"
                 )
                 await asyncio.sleep(backoff_time)
-                async with self._connection_lock:
-                    logger.info("Attempting safe disconnect...")
-                    await self._safely_disconnect()
-                    logger.info("Safe disconnect finished. Attempting to create new client...")
-                    try:
-                        self.stream = AsyncStreamingClient(
-                            bearer_token=settings.tweepy_client.bearer_token,
-                            wait_on_rate_limit=False,
-                        )
-                        self.stream.on_tweet = on_tweet
-                        self.stream.on_error = on_error
-                        logger.info("New client created. Syncing rules...")
+                try:
+                    self.stream = AsyncStreamingClient(
+                        bearer_token=settings.tweepy_client.bearer_token,
+                        wait_on_rate_limit=True,
+                    )
+                    self.stream.on_tweet = on_tweet
+                    self.stream.on_error = on_error
+                    logger.info("New client created. Syncing rules...")
 
-                        # Purge the stream rules to see if it clears out any stray connections on X side.
+                    # Purge the stream rules to see if it clears out any stray connections on X side.
+                    try:
                         current_rules = await self.stream.get_rules()
                         all_rules = [rule.id for rule in current_rules.data]
-                        logger.warning(f"Purging {len(all_rules)} rules from stream...")
-                        await self.stream.delete_rules(all_rules)
-                        logger.warning(f"Waiting, then re-creating stream rules.")
-                        await asyncio.sleep(30)
-                        await self._sync_rules()
-                        logger.info("Rules synced. Starting filter...")
-                        await self.stream.filter(
-                            tweet_fields=[
-                                "author_id",
-                                "entities",
-                                "public_metrics",
-                                "attachments",
-                            ]
-                        )
-                        logger.info("Successfully reconnected to X stream")
-                        return
+                        if all_rules:
+                            logger.warning(f"Purging {len(all_rules)} rules from stream...")
+                            await self.stream.delete_rules(all_rules)
                     except Exception as exc:
-                        logger.error(f"Failed to reconnect during attempt {retries+1}: {exc}")
-                        retries += 1
-                        backoff_time = min(300, backoff_time * 2)
+                        logger.error(f"Error resetting stream rules: {exc}")
+                    await self._sync_rules()
+                    logger.info("Rules synced. Starting filter...")
+                    await self.stream.filter(
+                        tweet_fields=[
+                            "author_id",
+                            "entities",
+                            "public_metrics",
+                            "attachments",
+                        ]
+                    )
+                    logger.info("Successfully reconnected to X stream")
+                    self.stream.on_tweet = on_tweet
+                    self.stream.on_error = on_error
+                    self.stream.on_request_error = on_error
+                    return
+                except Exception as exc:
+                    logger.error(f"Failed to reconnect during attempt {retries+1}: {exc}")
+                    retries += 1
+                    backoff_time = min(300, backoff_time * 2)
 
             if retries >= max_retries:
                 logger.critical(
