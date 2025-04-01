@@ -41,11 +41,20 @@ TWEET_FIELDS = [
 MAX_RESULTS = 20
 
 
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
 async def _create_invocation(agent: Agent, tweet: Dict):
     """
     Create the invocation, which in turn will trigger the event.
     """
-    task_text = "You have received the following tweet:\n" + json.dumps(tweet, indent=2)
+    task_text = "You have received the following tweet:\n" + json.dumps(
+        tweet, cls=DateTimeEncoder, indent=2
+    )
     try:
         invocation_id = await get_unique_id()
         async with get_session() as session:
