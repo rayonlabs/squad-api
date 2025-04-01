@@ -112,7 +112,8 @@ def vlm_tool(
                             "type": "text",
                             "text": prompt,
                         },
-                    ] + [
+                    ]
+                    + [
                         {
                             "type": "image_url",
                             "image_url": {

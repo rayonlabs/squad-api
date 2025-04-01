@@ -309,6 +309,10 @@ async def update_agent(
     tool_ids = body.get("tool_ids")
     if tool_ids is not None:
         agent.tools = await _load_tools(db, tool_ids, user.user_id)
+    if not args.x_searches:
+        agent.x_searches = []
+    if not args.x_invoke_filter:
+        agent.x_invoke_filter = None
     await populate_x_account(db, agent)
     await db.commit()
     await db.refresh(agent)

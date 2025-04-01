@@ -44,6 +44,7 @@ class ToolUpdateArgs(BaseModel):
         None,
         description="Arguments for the tool",
     )
+    code: Optional[str] = Field(None, description="Source code for custom tools")
     public: Optional[bool] = Field(None, description="Public tool")
 
 
@@ -221,7 +222,7 @@ async def update_tool(
             name=tool.name,
             description=update_data.get("description", tool.description),
             template=tool.template,
-            code=tool.code,
+            code=args.code,
             public=args.public,
             tool_args=update_data["tool_args"],
         )
