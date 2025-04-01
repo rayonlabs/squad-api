@@ -218,18 +218,20 @@ async def update_tool(
         update_data["tool_args"]["tool_name"] = tool.name
         if "description" in update_data and "tool_description" not in update_data["tool_args"]:
             update_data["tool_args"]["tool_description"] = update_data["description"]
-        validator_args = ToolArgs(
-            name=tool.name,
-            description=update_data.get("description", tool.description),
-            template=tool.template,
-            code=args.code,
-            public=args.public,
-            tool_args=update_data["tool_args"],
-        )
-        validator = ToolValidator(db, validator_args, user)
-        await validator.validate()
+    validator_args = ToolArgs(
+        name=tool.name,
+        description=update_data.get("description", tool.description),
+        template=tool.template,
+        code=args.code,
+        public=args.public,
+        tool_args=update_data["tool_args"],
+    )
+    validator = ToolValidator(db, validator_args, user)
+    await validator.validate()
     for key, value in update_data.items():
         setattr(tool, key, value)
+    if args.code:
+        tool.code = args.code
     await db.commit()
     await db.refresh(tool)
     return tool

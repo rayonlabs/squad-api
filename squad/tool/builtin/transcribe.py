@@ -31,7 +31,7 @@ class TranscribeTool(Tool):
         if language:
             payload["language"] = language
         response = requests.post(
-            "https://chutes-whisper-large-v3.chutes.ai/speak",
+            "https://chutes-whisper-large-v3.chutes.ai/transcribe",
             json=payload,
             headers={
                 "Authorization": settings.authorization,
