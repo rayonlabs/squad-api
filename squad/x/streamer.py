@@ -14,7 +14,12 @@ from squad.util import rate_limit, now_str
 from squad.database import get_session
 from squad.agent.schemas import Agent, AgentXInteraction
 from squad.invocation.schemas import get_unique_id, Invocation
-from squad.storage.x import index_tweets, tweet_to_index_format, get_users_by_id
+from squad.storage.x import (
+    index_tweets,
+    tweet_to_index_format,
+    get_users_by_id,
+    get_and_index_tweets,
+)
 import squad.database.orms  # noqa
 
 
@@ -29,6 +34,7 @@ TWEET_FIELDS = [
     "public_metrics",
     "attachments",
     "created_at",
+    "referenced_tweets",
 ]
 
 # Maximum tweets to fetch per request.
@@ -140,6 +146,46 @@ class XMentionsProcessor:
         except Exception as exc:
             logger.error(f"Error indexing tweet batch: {exc}\n{traceback.format_exc()}")
 
+    async def inject_parent_tweets(self, tweet, max_depth=5):
+        """
+        Inject parent tweet objects up to recursion limit.
+        """
+        current_depth = 0
+        parent_id = None
+        if "referenced_tweets" in tweet and tweet["referenced_tweets"]:
+            for ref in tweet["referenced_tweets"]:
+                if ref["type"] == "replied_to":
+                    parent_id = ref["id"]
+                    break
+        if not parent_id:
+            return
+        auth = "Bearer " + generate_auth_token(settings.default_user_id, duration_minutes=30)
+        target_object = tweet
+        while parent_id and current_depth < max_depth:
+            logger.info(f"Attempting to inject parent tweet: {parent_id}")
+            try:
+                tweets = await get_and_index_tweets([parent_id], auth)
+                if not tweets or len(tweets) == 0:
+                    logger.warning(f"Failed to fetch tweet with {parent_id=}")
+                    break
+                parent = tweets[0]
+                if parent:
+                    logger.success(f"Fetched the parent tweet: {parent.model_dump()}")
+                    target_object["referenced_tweet_parent"] = parent.model_dump()
+                    current_depth += 1
+                    target_object = target_object["referenced_tweet_parent"]
+                    parent_id = None
+                    if "referenced_tweets" in target_object and target_object["referenced_tweets"]:
+                        for ref in target_object["referenced_tweets"]:
+                            if ref["type"] == "replied_to":
+                                parent_id = ref["id"]
+                                break
+                else:
+                    break
+            except Exception as e:
+                logger.error(f"Error retrieving parent tweet: {e}")
+                break
+
     async def _check_mentions_for_agent(self, agent: Agent):
         """
         Check mentions for a specific agent and process any new mentions.
@@ -166,7 +212,13 @@ class XMentionsProcessor:
                 start_time=start_time,
                 max_results=MAX_RESULTS,
                 tweet_fields=TWEET_FIELDS,
-                expansions=["author_id", "entities.mentions.username"],
+                expansions=[
+                    "author_id",
+                    "entities.mentions.username",
+                    "referenced_tweets.id",
+                    "attachments.media_keys",
+                    "in_reply_to_user_id",
+                ],
                 user_fields=["username"],
             )
             if not mentions.data:
@@ -181,6 +233,11 @@ class XMentionsProcessor:
             sorted_mentions = sorted(mentions.data, key=lambda t: t.created_at)
             for tweet in sorted_mentions:
                 tweet_dict = tweet.data
+                if (
+                    getattr(tweet, "referenced_tweets", None)
+                    and "referenced_tweets" not in tweet_dict
+                ):
+                    tweet_dict["referenced_tweets"] = tweet.referenced_tweets
                 latest_mention_id = tweet.id
                 latest_mention_time = tweet.created_at
                 async with self._index_lock:
@@ -196,6 +253,17 @@ class XMentionsProcessor:
                         f"Skipping tweet, missing filter {agent.x_username=} {agent.x_invoke_filter=}"
                     )
                     continue
+
+                # Are we mentioning ourself?
+                reply_to_user = str(getattr(tweet, "in_reply_to_user_id", ""))
+                if str(tweet.author_id) == str(agent.x_user_id) and reply_to_user == str(
+                    agent.x_user_id
+                ):
+                    continue
+
+                # Inject parent hierarchy.
+                await self.inject_parent_tweets(tweet_dict)
+
                 # Check if we already have an interaction for this one.
                 async with get_session() as session:
                     existing = (

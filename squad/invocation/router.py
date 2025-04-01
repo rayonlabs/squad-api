@@ -169,9 +169,35 @@ async def get_invocation_output_file(
     data = io.BytesIO()
     async with settings.s3_client() as s3:
         await s3.download_fileobj(settings.storage_bucket, filename, data)
+
+    disposition = "attachment"
+    file_ext = Path(filename).suffix.lower()
+    content_type_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".mp4": "video/mp4",
+        ".mp3": "audio/mp3",
+        ".wav": "audio/wav",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".pdf": "application/pdf",
+        ".txt": "text/plain",
+        ".json": "application/json",
+        ".xml": "text/xml",
+    }
+    content_type = content_type_map.get(file_ext)
+    if content_type:
+        disposition = "inline"
+
+    headers = {
+        "Content-Disposition": f'{disposition}; filename="{Path(filename).name}"',
+    }
+    if content_type:
+        headers["Content-Type"] = content_type
     return Response(
         content=data.getvalue(),
-        headers={"Content-Disposition": f'attachment; filename="{Path(filename).name}"'},
+        headers=headers,
     )
 
 

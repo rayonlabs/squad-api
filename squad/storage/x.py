@@ -378,7 +378,7 @@ async def find_and_index_user_tweets(username: str, api_key: str) -> int:
     return 0
 
 
-async def get_and_index_tweets(ids: list[int], api_key: str) -> bool:
+async def get_and_index_tweets(ids: list[int], api_key: str):
     """
     Get tweets by their IDs.
     """
@@ -389,23 +389,37 @@ async def get_and_index_tweets(ids: list[int], api_key: str) -> bool:
             }
         },
         "size": 1,
-        "_source": False,
     }
     response = await settings.opensearch_client.search(
         index=f"tweets-{settings.tweet_index_version}",
         body=query,
     )
+    existing_docs = {
+        doc["_id"]: Tweet.from_index(doc["_source"]) for doc in response["hits"]["hits"]
+    }
     existing_ids = [int(doc["_id"]) for doc in response["hits"]["hits"]]
     to_fetch = list(set([_id for _id in ids if int(_id) not in existing_ids]))
     if not to_fetch:
         logger.warning(f"No new tweets to fetch: {ids}")
-        return False
-
+        return [existing_docs.get(str(_id)) for _id in ids]
     results = inject_usernames(
         await settings.tweepy_client.get_tweets(
             to_fetch,
-            tweet_fields=["id", "text", "created_at", "public_metrics", "author_id", "attachments"],
-            expansions=["author_id", "attachments.media_keys"],
+            tweet_fields=[
+                "id",
+                "text",
+                "created_at",
+                "public_metrics",
+                "author_id",
+                "attachments",
+                "referenced_tweets",
+            ],
+            expansions=[
+                "author_id",
+                "attachments.media_keys",
+                "referenced_tweets.id",
+                "in_reply_to_user_id",
+            ],
             media_fields=[
                 "alt_text",
                 "duration_ms",
@@ -423,9 +437,9 @@ async def get_and_index_tweets(ids: list[int], api_key: str) -> bool:
     tweets = await asyncio.gather(*[tweet_to_index_format(item, api_key) for item in results])
     if tweets:
         await index_tweets(tweets)
-        return True
-    logger.warning(f"No new tweets/replies/reposts found: {ids=}")
-    return False
+        for tweet in tweets:
+            existing_docs[str(tweet["id_num"])] = Tweet.from_index(tweet)
+    return [existing_docs.get(str(_id)) for _id in ids]
 
 
 async def find_and_index_tweets(
@@ -451,8 +465,16 @@ async def find_and_index_tweets(
         search = f"({search})" + " ".join([f"-is:{v}" for v in exclude])
     results = await settings.tweepy_client.search_recent_tweets(
         search,
-        tweet_fields=["id", "text", "created_at", "public_metrics", "author_id", "attachments"],
-        expansions=["author_id", "attachments.media_keys"],
+        tweet_fields=[
+            "id",
+            "text",
+            "created_at",
+            "public_metrics",
+            "author_id",
+            "attachments",
+            "referenced_tweets",
+        ],
+        expansions=["author_id", "attachments.media_keys", "referenced_tweets.id"],
         media_fields=[
             "alt_text",
             "duration_ms",

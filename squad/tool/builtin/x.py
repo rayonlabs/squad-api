@@ -146,13 +146,7 @@ class XTweeter(Tool):
 
                 # Add the successfully obtained media IDs to the main tweet payload
                 if media_ids:
-                    payload["media_ids"] = media_ids  # Twitter usually expects a list of media IDs
-
-                # XXX or link the asset directly.
-                # base_name = os.path.basename(media)
-                # payload["text"] += (
-                #    f"\nhttps://api.sqd.io/invocations/{settings.invocation_id}/render/{base_name}"
-                # )
+                    payload["media_ids"] = media_ids
             else:
                 if not isinstance(media, str):
                     reason = "it is not a string path"
