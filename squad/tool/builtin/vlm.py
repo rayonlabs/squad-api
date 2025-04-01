@@ -53,7 +53,10 @@ def vlm_tool(
 
         def forward(self, images: Any, prompt: str) -> str:
             nonlocal model, system_prompt, kwargs
-            kwargs.pop("endpoint", None)
+            if kwargs:
+                kwargs.pop("endpoint", None)
+            else:
+                kwargs = {}
             if not isinstance(images, list):
                 images = [images]
             images = images[:max_images]
@@ -104,8 +107,12 @@ def vlm_tool(
             call_args["messages"].append(
                 {
                     "role": "user",
-                    "content": [prompt]
-                    + [
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt,
+                        },
+                    ] + [
                         {
                             "type": "image_url",
                             "image_url": {
