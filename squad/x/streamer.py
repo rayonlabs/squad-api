@@ -52,8 +52,10 @@ async def _create_invocation(agent: Agent, tweet: Dict):
     """
     Create the invocation, which in turn will trigger the event.
     """
-    task_text = "You have received the following tweet:\n" + json.dumps(
-        tweet, cls=DateTimeEncoder, indent=2
+    task_text = (
+        "You have received the following tweet:\n"
+        + json.dumps(tweet, cls=DateTimeEncoder, indent=2)
+        + f"\nYou must use in_reply_to={tweet['id']} when calling x_tweet, tweet_id={tweet['id']} when using the x_like, x_retweet, or x_quote_tweet tools."
     )
     try:
         invocation_id = await get_unique_id()

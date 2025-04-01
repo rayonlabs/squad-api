@@ -193,7 +193,6 @@ async def oauth_callback(
             "redirect_uri": settings.x_api_callback_url,
             "code_verifier": code_verifier,
         }
-        print(f"POST: {data=} {headers=}")
         async with aiohttp.ClientSession() as session:
             async with session.post(token_url, headers=headers, data=data) as response:
                 if not 200 <= response.status < 300:
@@ -219,7 +218,7 @@ async def oauth_callback(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"No agent found for X user ID {user_id}. Please ensure an agent profile exists with this X user ID before authenticating.",
             )
-
+        agent.x_user_id = user_id
         agent.x_access_token = await encrypt(access_token["access_token"])
         agent.x_refresh_token = await encrypt(access_token["refresh_token"])
         try:

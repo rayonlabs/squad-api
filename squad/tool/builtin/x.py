@@ -78,7 +78,7 @@ class XTweeter(Tool):
         },
         "in_reply_to": {
             "type": "string",
-            "description": "ID of the tweet/X post this is a reply to, if it is a reply, which is the 'id_num' field of the original input tweet",
+            "description": "ID of the tweet/X post this is a reply to, if it is a reply, which is the 'id' field of the original input tweet. You must use this value when the task is to process an incoming tweet.",
             "nullable": True,
         },
         "media": {
