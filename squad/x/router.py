@@ -3,17 +3,17 @@ Router for X interactions.
 """
 
 import time
+import hashlib
 import tweepy
 import secrets
 import magic
 import mimetypes
 import aiohttp
-from yarl import URL
+import pybase64 as base64
 from loguru import logger
-from functools import lru_cache
 from typing import Optional
 from pydantic import BaseModel, Field
-from sqlalchemy import select, or_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status, Request, File, UploadFile
 from fastapi.responses import RedirectResponse
@@ -37,6 +37,23 @@ SUPPORTED_IMAGE_TYPES = [
 ]
 SUPPORTED_GIF_TYPES = ["image/gif"]
 SUPPORTED_VIDEO_TYPES = ["video/mp4"]
+SCOPE = [
+    "tweet.read",
+    "tweet.write",
+    "users.read",
+    "follows.read",
+    "follows.write",
+    "like.read",
+    "like.write",
+    "mute.read",
+    "mute.write",
+    "block.read",
+    "block.write",
+    "offline.access",
+    "media.write",
+    "bookmark.read",
+    "bookmark.write",
+]
 
 
 class TweetPayload(BaseModel):
@@ -79,28 +96,11 @@ async def determine_media_category(content_type: str, filename: str = None) -> s
     raise HTTPException(status_code=400, detail=f"Unsupported media type: {content_type}")
 
 
-@lru_cache(maxsize=1)
 def oauth_handler():
     return tweepy.OAuth2UserHandler(
         client_id=settings.x_client_id,
         redirect_uri=settings.x_api_callback_url,
-        scope=[
-            "tweet.read",
-            "tweet.write",
-            "users.read",
-            "follows.read",
-            "follows.write",
-            "like.read",
-            "like.write",
-            "mute.read",
-            "mute.write",
-            "block.read",
-            "block.write",
-            "offline.access",
-            "media.write",
-            "bookmark.read",
-            "bookmark.write",
-        ],
+        scope=SCOPE,
         client_secret=settings.x_client_secret,
     )
 
@@ -120,25 +120,24 @@ class QuoteTweetRequest(BaseModel):
 
 @router.get("/auth")
 async def get_oauth_url(redirect_path: Optional[str] = None):
-    oauth = oauth_handler()
     code_verifier = secrets.token_urlsafe(64)
-    try:
-        auth_url = oauth.get_authorization_url(code_verifier=code_verifier)
-    except TypeError:
-        try:
-            auth_url = oauth.get_authorization_url()
-        except Exception as e:
-            logger.error(f"Failed to get authorization URL: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create authorization URL",
-            )
-
-    parsed_url = URL(auth_url)
-    state = parsed_url.query.get("state")
-    await settings.redis_client.set(f"xstate:{state}", code_verifier)
+    code_challenge_bytes = hashlib.sha256(code_verifier.encode()).digest()
+    code_challenge = base64.urlsafe_b64encode(code_challenge_bytes).decode().rstrip("=")
+    state = secrets.token_urlsafe(16)
+    auth_url = (
+        "https://x.com/i/oauth2/authorize"
+        "?response_type=code"
+        f"&client_id={settings.x_client_id}"
+        f"&redirect_uri={settings.x_api_callback_url}"
+        f"&scope={' '.join(SCOPE)}"
+        f"&state={state}"
+        f"&code_challenge={code_challenge}"
+        f"&code_challenge_method=S256"
+    )
+    await settings.redis_client.set(f"xstate:{state}", code_verifier, ex=900)
+    logger.info(f"Stored code_verifier for state {state}: {code_verifier}")
     if redirect_path:
-        await settings.redis_client.set(f"xredirect:{state}", redirect_path)
+        await settings.redis_client.set(f"xredirect:{state}", redirect_path, ex=600)
     return RedirectResponse(url=auth_url)
 
 
@@ -150,8 +149,6 @@ async def oauth_callback(
     code: Optional[str] = None,
     error: Optional[str] = None,
 ):
-    oauth = oauth_handler()
-    callback_url = request.url._url
     if error:
         error_description = request.query_params.get(
             "error_description", "No description provided."
@@ -182,26 +179,37 @@ async def oauth_callback(
         redirect_path = "/?x_auth_success=true"
     if isinstance(code_verifier, bytes):
         code_verifier = code_verifier.decode()
-    parsed_url = URL(callback_url)
-    if "code_verifier" not in parsed_url.query:
-        callback_url = str(
-            parsed_url.update_query({"code_verifier": code_verifier, **dict(parsed_url.query)})
-        )
-        logger.info(f"Updated callback URL to include {code_verifier=}")
     try:
-        access_token = oauth.fetch_token(callback_url)
+        token_url = "https://api.x.com/2/oauth2/token"
+        client_credentials = f"{settings.x_client_id}:{settings.x_client_secret}"
+        client_credentials_b64 = base64.b64encode(client_credentials.encode()).decode()
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Basic {client_credentials_b64}",
+        }
+        data = {
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": settings.x_api_callback_url,
+            "code_verifier": code_verifier,
+        }
+        print(f"POST: {data=} {headers=}")
+        async with aiohttp.ClientSession() as session:
+            async with session.post(token_url, headers=headers, data=data) as response:
+                if not 200 <= response.status < 300:
+                    error_text = await response.text()
+                    logger.warning(f"Token request failed: {response.status} - {error_text}")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Failed to fetch access token: {error_text}",
+                    )
+                access_token = await response.json()
         client = tweepy.Client(access_token["access_token"])
         user = client.get_me(user_auth=False)
         user_id = str(user.data.id)
         x_username = user.data.username
         agent = (
-            (
-                await db.execute(
-                    select(Agent).where(
-                        or_(Agent.x_user_id == user_id, Agent.x_username.ilike(x_username))
-                    )
-                )
-            )
+            (await db.execute(select(Agent).where(Agent.x_username.ilike(x_username))))
             .unique()
             .scalar_one_or_none()
         )
@@ -214,7 +222,10 @@ async def oauth_callback(
 
         agent.x_access_token = await encrypt(access_token["access_token"])
         agent.x_refresh_token = await encrypt(access_token["refresh_token"])
-        agent.x_token_expires_at = access_token["expires_at"]
+        try:
+            agent.x_token_expires_at = access_token["expires_at"]
+        except Exception:
+            agent.x_token_expires_at = time.time() + access_token["expires_in"]
         await db.commit()
         await db.refresh(agent)
         logger.info(

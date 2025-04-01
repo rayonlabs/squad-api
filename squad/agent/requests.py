@@ -68,10 +68,6 @@ class AgentArgs(BaseModel):
         None,
         description="Prompt addendum when handling scheduled events, e.g. randomly tweeting N times per day.",
     )
-    x_user_id: Optional[int] = Field(
-        None,
-        description="Numeric ID of your agent's X account. Probably best to just use username if you don't know.",
-    )
     x_username: Optional[str] = Field(
         None,
         pattern=r"^[\w\u0080-\uFFFF]{1,24}$",

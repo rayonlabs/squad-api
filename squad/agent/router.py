@@ -21,7 +21,7 @@ from squad.agent.response import AgentResponse
 from squad.tool.schemas import Tool
 from squad.invocation.schemas import Invocation, get_unique_id
 from squad.invocation.router import PaginatedInvocations, list_invocations
-from squad.storage.x import get_users, get_users_by_id
+from squad.storage.x import get_users
 
 router = APIRouter()
 
@@ -69,15 +69,7 @@ async def populate_x_account(db, agent):
     if agent.x_user_id and agent.x_username:
         return
     try:
-        if agent.x_user_id:
-            users = await get_users_by_id([agent.x_user_id])
-            if not users or not users.get(agent.x_user_id):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Could not load X user account with user_id={agent.x_user_id}",
-                )
-            agent.x_username = users[agent.x_user_id]["username"]
-        elif agent.x_username:
+        if agent.x_username:
             users = await get_users([agent.x_username])
             if not users or not users.get(agent.x_username):
                 raise HTTPException(
@@ -301,6 +293,18 @@ async def update_agent(
                 detail=f"Could not determine agent context size: {exc}",
             )
 
+    # X change?
+    x_fields = ["x_user_id", "x_access_token", "x_refresh_token", "x_token_expires_at"]
+    if agent.x_username != args.x_username:
+        if not args.x_username:
+            agent.x_username = None
+        else:
+            agent.x_username = args.x_username
+            await populate_x_account(db, agent)
+        for key in x_fields:
+            setattr(agent, key, None)
+        agent.last_mentioned_at = func.now()
+
     # Sanity check defaults/limits.
     if not args.max_execution_time or args.max_execution_time > user.limits.max_execution_time:
         args.max_execution_time = user.limits.max_execution_time
@@ -313,7 +317,6 @@ async def update_agent(
         agent.x_searches = []
     if not args.x_invoke_filter:
         agent.x_invoke_filter = None
-    await populate_x_account(db, agent)
     await db.commit()
     await db.refresh(agent)
     return agent
