@@ -4189,14 +4189,14 @@ files = [
 
 [[package]]
 name = "smolagents"
-version = "1.11.0"
+version = "1.12.0"
 description = "🤗 smolagents: a barebones library for agents. Agents write python code to call tools or orchestrate other agents."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "smolagents-1.11.0-py3-none-any.whl", hash = "sha256:895711a90760b18b4229aa835dfddf11823457dcfdd0001c496423cad356326b"},
-    {file = "smolagents-1.11.0.tar.gz", hash = "sha256:d009779f37d893e04accd1167f7aff5fccbd73c83e842d76769678b9e57fa86f"},
+    {file = "smolagents-1.12.0-py3-none-any.whl", hash = "sha256:dc8472e35866d956a2d2c2884ba1cb9599cb93729a198bb424998313a8d79ce5"},
+    {file = "smolagents-1.12.0.tar.gz", hash = "sha256:0c3c534ea6335595a1c7b0d10de5abf59ac4a626d340428731f457fe9104aaca"},
 ]
 
 [package.dependencies]
@@ -4224,7 +4224,7 @@ mlx-lm = ["mlx-lm"]
 openai = ["openai (>=1.58.1)"]
 quality = ["ruff (>=0.9.0)"]
 telemetry = ["arize-phoenix", "openinference-instrumentation-smolagents (>=0.1.4)", "opentelemetry-exporter-otlp", "opentelemetry-sdk"]
-test = ["ipython (>=8.31.0)", "pytest (>=8.1.0)", "python-dotenv (>=1.0.1)", "rank-bm25", "smolagents[all]"]
+test = ["ipython (>=8.31.0)", "pytest (>=8.1.0)", "pytest-datadir", "python-dotenv (>=1.0.1)", "rank-bm25", "smolagents[all]"]
 torch = ["torch", "torchvision"]
 transformers = ["accelerate", "smolagents[torch]", "transformers (>=4.0.0)"]
 vision = ["helium", "selenium"]
