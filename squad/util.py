@@ -9,6 +9,7 @@ import secrets
 import datetime
 import requests
 import traceback
+import pybase64 as base64
 from functools import lru_cache
 from loguru import logger
 from contextlib import asynccontextmanager
@@ -42,14 +43,9 @@ def tokenizer():
     return TOKENIZER["t"]
 
 
-@lru_cache(maxsize=1)
-def _get_chutes_token(_: int):
-    return f"Bearer {generate_auth_token(settings.default_user_id, duration_minutes=5)}"
-
-
 def get_chutes_token():
-    now = int(time.time())
-    return _get_chutes_token(now - (now % 360))
+    token = generate_auth_token(settings.default_user_id, duration_minutes=5)
+    return f"Bearer {token}"
 
 
 @asynccontextmanager
@@ -168,7 +164,7 @@ async def contains_hate_speech(texts: list[str]):
     try:
         async with HATE_SM.get_session() as session:
             async with session.post(
-                "/predict", headers={"Authorzation": get_chutes_token()}, json={"texts": texts}
+                "/predict", headers={"Authorization": get_chutes_token()}, json={"texts": texts}
             ) as resp:
                 result = await resp.json()
                 for idx in range(len(result)):
@@ -216,11 +212,27 @@ async def rerank(query, texts: list[str], top_n: int = 3, auth: str = None):
     return texts[:top_n]
 
 
-async def contains_nsfw(media):
+async def contains_nsfw(media_bytes, content_type):
     """
     Check if the target media has NSFW content.
     """
-    logger.warning("TODO: nsfw")
+    base_enc = base64.b64encode(media_bytes).decode()
+    if not content_type.startswith("image/"):
+        logger.info("TODO: video NSFW check")
+    try:
+        async with NSFW_SM.get_session() as session:
+            async with session.post(
+                "/image",
+                headers={"Authorization": get_chutes_token()},
+                json={"image_b64": base_enc},
+            ) as resp:
+                result = await resp.json()
+                if result.get("label") == "nsfw":
+                    logger.warning(f"Detected NSFW content: {result}")
+                    return True
+                logger.info(f"No NSFW detected: {result}")
+    except Exception as exc:
+        logger.warning(f"Error checking NSFW content: {exc}")
     return False
 
 

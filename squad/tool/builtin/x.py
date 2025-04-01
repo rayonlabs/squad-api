@@ -97,30 +97,88 @@ class XTweeter(Tool):
             payload["in_reply_to"] = in_reply_to
         request_args = {
             "url": f"{settings.squad_api_base_url}/x/tweet",
-            "json": payload,
             "headers": {"Authorization": settings.authorization},
         }
+        media_ids = []
         if media:
             if (
                 isinstance(media, str)
                 and os.path.exists(media)
-                and media.endswith(("png", "jpg", "jpeg", "gif", "mp4", "wav", "mp3", "webp"))
+                and media.endswith(("png", "jpg", "jpeg", "gif", "mp4", "webp"))
             ):
-                base_name = os.path.basename(media)
-                payload["text"] += (
-                    f"\nhttps://api.sqd.io/invocations/{settings.invocation_id}/render/{base_name}"
-                )
+                media_upload_url = f"{settings.squad_api_base_url}/x/media"
+                media_headers = {"Authorization": settings.authorization}
+                try:
+                    with open(media, "rb") as f:
+                        files = {"file": (os.path.basename(media), f)}
+                        media_response = requests.post(
+                            media_upload_url, headers=media_headers, files=files
+                        )
+                    media_response.raise_for_status()
+                    response_data = media_response.json()
+                    if "media_id" in response_data:
+                        media_id = response_data["media_id"]
+                        media_ids.append(media_id)
+                        print(f"Media uploaded successfully. Media ID: {media_id}")
+                    else:
+                        print(
+                            f"Warning: Media upload request succeeded, but 'media_id' not found in response: {media_response.text}"
+                        )
+                except requests.exceptions.HTTPError as err:
+                    print(f"HTTP Error occurred during media upload: {err}")
+                    print(f"Status Code: {err.response.status_code}")
+                    print(f"Response Body: {err.response.text}")
+                    raise Exception(f"Failed to upload media file {media}") from err
+                except requests.exceptions.RequestException as e:
+                    print(f"Other request error during media upload: {e}")
+                    raise Exception(f"Failed to upload media file {media}") from e
+                except (IOError, OSError) as e:
+                    print(f"File error reading media {media}: {e}")
+                    raise Exception(f"Failed to read media file {media}") from e
+                except KeyError as e:
+                    print(
+                        f"Error parsing media upload response: Missing key {e}. Response: {media_response.text}"
+                    )
+                    raise Exception(f"Failed to parse media upload response for {media}") from e
+                except Exception as e:
+                    print(f"An unexpected error occurred during media processing: {e}")
+                    raise Exception(f"Failed to process media file {media}") from e
+
+                # Add the successfully obtained media IDs to the main tweet payload
+                if media_ids:
+                    payload["media_ids"] = media_ids  # Twitter usually expects a list of media IDs
+
+                # XXX or link the asset directly.
+                # base_name = os.path.basename(media)
+                # payload["text"] += (
+                #    f"\nhttps://api.sqd.io/invocations/{settings.invocation_id}/render/{base_name}"
+                # )
+            else:
+                if not isinstance(media, str):
+                    reason = "it is not a string path"
+                elif not os.path.exists(media):
+                    reason = f"file does not exist at path: {media}"
+                else:
+                    reason = "it is not a supported file type (png, jpg, jpeg, gif, mp4, webp)"
+                raise Exception(f"Invalid media provided, {reason}!")
+
+        request_args["json"] = payload
         response = requests.post(**request_args)
         try:
             response.raise_for_status()
             return f"Successfully tweeted: {response.text}"
         except requests.exceptions.HTTPError as err:
-            print(f"HTTP Error occurred: {err}")
+            print(f"HTTP Error occurred posting tweet: {err}")
             print(f"Status Code: {err.response.status_code}")
             print(f"Response Body: {err.response.text}")
-            raise err
+            raise err  # Re-raise the original error
         except requests.exceptions.RequestException as e:
-            print(f"Other request error: {e}")
+            print(f"Other request error posting tweet: {e}")
+            raise e  # Re-raise the original error
+        except Exception as e:  # Catch potential JSON parsing errors etc.
+            print(f"An unexpected error occurred after posting tweet: {e}")
+            print(f"Response status: {response.status_code}")
+            print(f"Response text: {response.text}")
             raise e
 
 

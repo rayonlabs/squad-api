@@ -142,6 +142,26 @@ app.kubernetes.io/name: execution
     secretKeyRef:
       name: x-secret
       key: client-secret
+- name: X_ACCESS_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: x-secret
+      key: access-token
+- name: X_ACCESS_TOKEN_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: x-secret
+      key: access-token-secret
+- name: X_CONSUMER_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: x-secret
+      key: consumer-token
+- name: X_CONSUMER_TOKEN_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: x-secret
+      key: consumer-token-secret
 - name: AES_SECRET
   valueFrom:
     secretKeyRef:

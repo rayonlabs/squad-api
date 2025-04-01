@@ -47,6 +47,7 @@ aiomcache = "^0.8.2"
 transformers = "^4.48.2"
 tiktoken = "^0.9.0"
 huggingface-hub = "^0.29.3"
+python-magic = "^0.4.27"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.8.5"

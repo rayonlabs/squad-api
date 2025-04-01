@@ -99,8 +99,10 @@ async def perform_data_universe_search(
     search: DataUniverseSearchParams,
     request: Request,
     authorization: str | None = Header(None, alias="Authorization"),
+    current_user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
-    await get_current_agent(issuer="squad")(request, authorization)
+    if not current_user:
+        await get_current_agent(issuer="squad")(request, authorization)
     payload = search.model_dump()
     for key, v in payload.items():
         if isinstance(v, datetime):
@@ -115,8 +117,10 @@ async def perform_apx_web_search(
     search: ApexWebSearchParams,
     request: Request,
     authorization: str | None = Header(None, alias="Authorization"),
+    current_user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
-    await get_current_agent(issuer="squad")(request, authorization)
+    if not current_user:
+        await get_current_agent(issuer="squad")(request, authorization)
     payload = search.model_dump()
     for key, v in payload.items():
         if isinstance(v, datetime):

@@ -5,6 +5,9 @@ Router for X interactions.
 import time
 import tweepy
 import secrets
+import magic
+import mimetypes
+import aiohttp
 from yarl import URL
 from loguru import logger
 from functools import lru_cache
@@ -12,23 +15,68 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, File, UploadFile
 from fastapi.responses import RedirectResponse
 from squad.auth import get_current_agent
 from squad.config import settings
-from squad.util import encrypt, decrypt, contains_hate_speech
+from squad.util import encrypt, decrypt, contains_hate_speech, contains_nsfw
 from squad.database import get_db_session
 from squad.agent.schemas import Agent
 
 router = APIRouter()
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-ALLOWED_VIDEO_TYPES = {"video/mp4"}
+MEDIA_CATEGORIES = {"image": "tweet_image", "gif": "tweet_gif", "video": "tweet_video"}
+SUPPORTED_IMAGE_TYPES = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/tiff",
+    "image/bmp",
+    "image/svg+xml",
+]
+SUPPORTED_GIF_TYPES = ["image/gif"]
+SUPPORTED_VIDEO_TYPES = ["video/mp4"]
 
 
 class TweetPayload(BaseModel):
     text: str
     in_reply_to: int
+    media_ids: Optional[list[int]] = []
+
+
+async def get_content_type_from_filename(filename: str) -> str:
+    """
+    Get content type from filename if the provided content_type is missing or generic.
+    """
+    content_type, _ = mimetypes.guess_type(filename)
+    return content_type
+
+
+async def determine_media_category(content_type: str, filename: str = None) -> str:
+    """
+    Determine the appropriate media category based on content type with filename fallback.
+    """
+    if not content_type or content_type == "application/octet-stream":
+        if not filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot determine media type: both content_type and filename are invalid",
+            )
+        content_type = await get_content_type_from_filename(filename)
+        if not content_type:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not determine content type from filename: {filename}",
+            )
+    content_type = content_type.lower()
+    if any(content_type.startswith(t) for t in SUPPORTED_IMAGE_TYPES):
+        return MEDIA_CATEGORIES["image"]
+    elif any(content_type == t for t in SUPPORTED_GIF_TYPES):
+        return MEDIA_CATEGORIES["gif"]
+    elif any(content_type.startswith(t) for t in SUPPORTED_VIDEO_TYPES):
+        return MEDIA_CATEGORIES["video"]
+    raise HTTPException(status_code=400, detail=f"Unsupported media type: {content_type}")
 
 
 @lru_cache(maxsize=1)
@@ -210,6 +258,145 @@ async def get_agent_x_client(db: AsyncSession, agent: Agent):
     return tweepy.Client(await decrypt(agent.x_access_token))
 
 
+@router.post("/media")
+async def upload_media(
+    file: UploadFile = File(...),
+    agent: Agent = Depends(get_current_agent(scopes=["x"])),
+    db: AsyncSession = Depends(get_db_session),
+):
+    await get_agent_x_client(db, agent)
+
+    # Get file content and determine size
+    file_content = await file.read()
+    total_bytes = len(file_content)
+
+    # Detect content type.
+    content_type = file.content_type
+
+    sample = file_content[:2048]
+    detected_mime = magic.Magic(mime=True).from_buffer(sample)
+    if detected_mime and detected_mime != "application/octet-stream":
+        content_type = detected_mime
+    media_category = await determine_media_category(content_type, file.filename)
+
+    if media_category == "tweet_image" and total_bytes > 5 * 1024 * 1024:
+        return {"error": "Image file size exceeds the 5MB limit"}
+    elif media_category == "tweet_gif" and total_bytes > 15 * 1024 * 1024:
+        return {"error": "GIF file size exceeds the 15MB limit"}
+    elif media_category == "tweet_video" and total_bytes > 512 * 1024 * 1024:
+        return {"error": "Video file size exceeds the 512MB limit"}
+    await file.seek(0)
+
+    # NSFW?
+    if await contains_nsfw(file_content, content_type):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Media appears to contain NSFW content.",
+        )
+
+    # Use the agent's X access token.
+    access_token = await decrypt(agent.x_access_token)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with aiohttp.ClientSession() as session:
+        # INIT required to get a media ID to use.
+        init_data = {
+            "command": "INIT",
+            "total_bytes": str(total_bytes),
+            "media_type": content_type,
+            "media_category": media_category,
+        }
+        async with session.post(
+            "https://api.twitter.com/2/media/upload", data=init_data, headers=headers
+        ) as init_response:
+            if not 200 <= init_response.status < 300:
+                error_text = await init_response.text()
+                return {"error": f"Failed to initialize media upload: {error_text}"}
+            init_result = await init_response.json()
+            media_id = init_result.get("data", {}).get("id")
+            if not media_id:
+                return {"error": "Failed to get media_id from initialization"}
+
+        # Now upload the actual media via APPEND, either single post or chunked.
+        CHUNK_SIZE = 5 * 1024 * 1024
+        if total_bytes <= CHUNK_SIZE:
+            form_data = aiohttp.FormData()
+            form_data.add_field("command", "APPEND")
+            form_data.add_field("media_id", media_id)
+            form_data.add_field("segment_index", "0")
+            form_data.add_field(
+                "media", file_content, filename=file.filename, content_type=content_type
+            )
+            async with session.post(
+                "https://api.twitter.com/2/media/upload", data=form_data, headers=headers
+            ) as append_response:
+                if not 200 <= append_response.status < 300:
+                    error_text = await append_response.text()
+                    return {"error": f"Failed to append media: {error_text}"}
+        else:
+            chunks = (total_bytes + CHUNK_SIZE - 1) // CHUNK_SIZE
+            for i in range(chunks):
+                start_byte = i * CHUNK_SIZE
+                end_byte = min((i + 1) * CHUNK_SIZE, total_bytes)
+                chunk_data = file_content[start_byte:end_byte]
+                form_data = aiohttp.FormData()
+                form_data.add_field("command", "APPEND")
+                form_data.add_field("media_id", media_id)
+                form_data.add_field("segment_index", str(i))
+                form_data.add_field(
+                    "media", chunk_data, filename=file.filename, content_type=content_type
+                )
+                async with session.post(
+                    "https://api.twitter.com/2/media/upload", data=form_data, headers=headers
+                ) as append_response:
+                    if not 200 <= append_response.status < 300:
+                        error_text = await append_response.text()
+                        return {
+                            "error": f"Failed to append media chunk {i+1}/{chunks}: {error_text}"
+                        }
+
+        # async with session.post(
+        #    "https://api.twitter.com/2/media/upload",
+        #    data=form_data,
+        #    headers=headers
+        # ) as append_response:
+        #    if append_response.status != 200 and append_response.status != 204:
+        #        error_text = await append_response.text()
+        #        return {"error": f"Failed to append media: {error_text}"}
+
+        # FINALIZE the media upload.
+        finalize_data = {"command": "FINALIZE", "media_id": media_id}
+        async with session.post(
+            "https://api.twitter.com/2/media/upload", data=finalize_data, headers=headers
+        ) as finalize_response:
+            if not 200 <= finalize_response.status < 3090:
+                error_text = await finalize_response.text()
+                return {"error": f"Failed to finalize media upload: {error_text}"}
+            finalize_result = await finalize_response.json()
+            processing_info = finalize_result.get("data", {}).get("processing_info")
+            if processing_info:
+                processing_state = processing_info.get("state")
+                if processing_state == "pending" or processing_state == "in_progress":
+                    return {
+                        "media_id": media_id,
+                        "status": "processing",
+                        "check_after_secs": processing_info.get("check_after_secs", 0),
+                        "progress_percent": processing_info.get("progress_percent", 0),
+                    }
+                elif processing_state == "failed":
+                    return {
+                        "error": "Media processing failed",
+                        "media_id": media_id,
+                        "details": processing_info.get("error", {}),
+                    }
+            return {
+                "media_id": media_id,
+                "status": "completed",
+                "expires_after_secs": finalize_result.get("data", {}).get(
+                    "expires_after_secs", 86400
+                ),
+            }
+
+
 @router.post("/tweet")
 async def tweet(
     tweet_payload: TweetPayload,
@@ -224,9 +411,12 @@ async def tweet(
         )
 
     client = await get_agent_x_client(db, agent)
+    if not tweet_payload.media_ids:
+        tweet_payload.media_ids = None
     response = client.create_tweet(
         text=tweet_payload.text,
         in_reply_to_tweet_id=tweet_payload.in_reply_to,
+        media_ids=tweet_payload.media_ids,
         user_auth=False,
     )
     return {"tweet_id": response.data["id"]}

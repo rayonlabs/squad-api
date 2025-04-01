@@ -151,7 +151,7 @@ class Settings(BaseSettings):
     )
     apex_search_sm: Optional[SessionManager] = (
         SessionManager(
-            headers={"Authorization": os.getenv("APEX_SEARCH_API_KEY")},
+            headers={"api-key": os.getenv("APEX_SEARCH_API_KEY")},
             base_url=os.getenv("APEX_SEARCH_BASE_URL", "https://sn1.api.macrocosmos.ai"),
         )
         if os.getenv("APEX_SEARCH_API_KEY")
@@ -167,6 +167,10 @@ class Settings(BaseSettings):
     x_api_callback_url: Optional[str] = (
         os.getenv("SQUAD_API_BASE_URL", "http://127.0.0.1:8000") + "/x/callback"
     )
+    x_access_token: Optional[str] = os.getenv("X_ACCESS_TOKEN")
+    x_access_token_secret: Optional[str] = os.getenv("X_ACCESS_TOKEN_SECRET")
+    x_consumer_token: Optional[str] = os.getenv("X_CONSUMER_TOKEN")
+    x_consumer_token_secret: Optional[str] = os.getenv("X_CONSUMER_TOKEN_SECRET")
 
     # Squad URLs.
     squad_base_url: str = os.getenv("SQUAD_BASE_URL", "https://sqd.io")

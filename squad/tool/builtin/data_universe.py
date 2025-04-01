@@ -22,7 +22,7 @@ class DataUniverseSearcher(Tool):
         "keywords": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "list of keywords to search, between 1 and 5 items",
+            "description": "list of keywords to search, between 1 and 5 items, these aren't just single words but moreso phrases or full questions, similar to twitter search API",
         },
         "usernames": {
             "type": "array",
@@ -89,7 +89,6 @@ class DataUniverseSearcher(Tool):
         if search_results:
             singular_items = []
             for result in search_results:
-                result["content"] = result["content"]["content"]
                 singular_items.append(
                     "\n".join(
                         [f"{key}: {value}" for key, value in result.items() if key in keys_to_keep]
