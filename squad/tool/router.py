@@ -11,6 +11,7 @@ from sqlalchemy import select, or_, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status
 from squad.auth import get_current_user
+from squad.util import validate_logo
 from squad.database import get_db_session
 from squad.pagination import PaginatedResponse
 from squad.tool.schemas import Tool
@@ -40,6 +41,7 @@ class ToolUpdateArgs(BaseModel):
         None,
         description="Human readable description of the function",
     )
+    logo_id: Optional[str] = Field(None, "Logo ID")
     tool_args: Optional[dict] = Field(
         None,
         description="Arguments for the tool",
@@ -179,6 +181,9 @@ async def create_tool(
             detail="You need a higher service tier to use custom code",
         )
 
+    # Check the logo.
+    await validate_logo(args.logo_id)
+
     validator = ToolValidator(db, args, user)
     await validator.validate()
     tool = None
@@ -218,12 +223,17 @@ async def update_tool(
         update_data["tool_args"]["tool_name"] = tool.name
         if "description" in update_data and "tool_description" not in update_data["tool_args"]:
             update_data["tool_args"]["tool_description"] = update_data["description"]
+
+    # Check the logo.
+    await validate_logo(args.logo_id)
+
     validator_args = ToolArgs(
         name=tool.name,
         description=update_data.get("description", tool.description),
         template=tool.template,
         code=args.code,
         public=args.public,
+        logo_id=args.logo_id,
         tool_args=update_data["tool_args"],
     )
     validator = ToolValidator(db, validator_args, user)

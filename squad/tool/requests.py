@@ -13,6 +13,7 @@ class ToolArgs(BaseModel):
         pattern="^[a-z][a-z0-9_]*$",
         description="Function name, which must be python snake_case format",
     )
+    logo_id: Optional[str] = Field(None, description="Logo ID")
     description: str = Field(
         description="Human readable description of the function, i.e. for letting others know quickly what the function's purpose is.",
     )

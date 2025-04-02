@@ -31,6 +31,13 @@ class AgentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     tools: Optional[list[ToolResponse]]
+    logo_id: Optional[str]
 
     class Config:
         from_attributes = True
+
+    @property
+    def logo(self):
+        if self.logo_id:
+            return f"https://logos.chutes.ai/logo/{self.logo_id}.webp"
+        return None

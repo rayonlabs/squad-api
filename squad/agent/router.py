@@ -10,7 +10,7 @@ from typing import Optional, Any, Annotated
 from sqlalchemy import select, or_, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File
-from squad.util import now_str
+from squad.util import now_str, validate_logo
 from squad.auth import get_current_user
 from squad.config import settings
 from squad.database import get_db_session
@@ -222,6 +222,9 @@ async def create_agent(
             detail=f"An agent with name {agent.name} already exists",
         )
 
+    # Validate logo.
+    await validate_logo(args.logo_id)
+
     # Add the tools.
     if tool_ids:
         agent.tools = await _load_tools(db, tool_ids, user.user_id)
@@ -308,6 +311,11 @@ async def update_agent(
     # Sanity check defaults/limits.
     if not args.max_execution_time or args.max_execution_time > user.limits.max_execution_time:
         args.max_execution_time = user.limits.max_execution_time
+
+    # Validate logo.
+    if args.logo_id != agent.logo_id:
+        await validate_logo(args.logo_id)
+        agent.logo_id = args.logo_id
 
     # Add the tools.
     tool_ids = body.get("tool_ids")

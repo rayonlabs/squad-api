@@ -9,7 +9,9 @@ import secrets
 import datetime
 import requests
 import traceback
+import aiohttp
 import pybase64 as base64
+from fastapi import HTTPException, status
 from functools import lru_cache
 from loguru import logger
 from contextlib import asynccontextmanager
@@ -225,6 +227,7 @@ async def contains_nsfw(media_bytes, content_type):
                 "/image",
                 headers={"Authorization": get_chutes_token()},
                 json={"image_b64": base_enc},
+                timeout=10.0,
             ) as resp:
                 result = await resp.json()
                 if result.get("label") == "nsfw":
@@ -238,3 +241,23 @@ async def contains_nsfw(media_bytes, content_type):
 
 def now_str():
     return datetime.datetime.now().isoformat()
+
+
+async def validate_logo(logo_id: str):
+    """
+    Check if a logo is valid.
+    """
+    if not logo_id:
+        return
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://logos.chutes.ai/logo/{logo_id}.webp") as resp:
+                resp.raise_for_status()
+                image_bytes = await resp.read()
+                if await contains_nsfw(image_bytes, "image/webp"):
+                    raise ValueError("Image contains NSFW!")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid logo_id: {logo_id}: {exc}",
+        )

@@ -24,6 +24,7 @@ class AgentArgs(BaseModel):
         min_length=1,
         max_length=1024,
     )
+    logo_id: Optional[str] = Field(None, description="Logo ID")
     model: Optional[str] = Field(
         settings.default_text_gen_model,
         description="The primary LLM to power the agent with.",

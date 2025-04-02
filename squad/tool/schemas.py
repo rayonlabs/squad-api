@@ -29,6 +29,7 @@ class Tool(Base):
     tool_args = Column(JSONB, nullable=True)
     public = Column(Boolean, default=False)
     user_id = Column(String, nullable=False)
+    logo_id = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     agents = relationship("Agent", secondary=agent_tools, back_populates="tools")

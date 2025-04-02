@@ -17,6 +17,13 @@ class ToolResponse(BaseModel):
     user_id: Optional[str]
     public: bool
     created_at: datetime
+    logo_id: Optional[str]
 
     class Config:
         from_attributes = True
+
+    @property
+    def logo(self):
+        if self.logo_id:
+            return f"https://logos.chutes.ai/logo/{self.logo_id}.webp"
+        return None

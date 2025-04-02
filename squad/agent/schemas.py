@@ -61,6 +61,8 @@ class Agent(Base):
     public = Column(Boolean, default=True)
     include_trace = Column(Boolean, default=True)
 
+    logo_id = Column(String, nullable=True)
+
     # System prompt overrides.
     sys_base_prompt = Column(String, nullable=True)
     sys_x_prompt = Column(String, nullable=True)
