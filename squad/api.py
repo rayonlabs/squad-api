@@ -122,16 +122,17 @@ app.include_router(secret_router, prefix="/secrets", tags=["Secrets"])
 app.include_router(x_router, prefix="/x", tags=["X"])
 
 # CORS
-origins = [
-    "http://localhost:5174",
-    "http://localhost:8000",
-    "http://sqd.lvh.me:8000",
-    "https://sqd.io",
-    "https://www.sqd.io",
-    "https://chutes.ai",
-    "https://squad-app.vercel.app",
-    "http://squad-app.vercel.app",
-]
+origins = ["*"]  # XXX delete this when ready
+# origins = [
+#    "http://localhost:5174",
+#    "http://localhost:8000",
+#    "http://sqd.lvh.me:8000",
+#    "https://sqd.io",
+#    "https://www.sqd.io",
+#    "https://chutes.ai",
+#    "https://squad-app.vercel.app",
+#    "http://squad-app.vercel.app",
+# ]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

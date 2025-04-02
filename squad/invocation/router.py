@@ -185,6 +185,7 @@ async def get_invocation_output_file(
         ".txt": "text/plain",
         ".json": "application/json",
         ".xml": "text/xml",
+        ".log": "text/plain",
     }
     content_type = content_type_map.get(file_ext)
     if content_type:
@@ -322,7 +323,7 @@ async def stream_invocation(
                 yield f"data: ERROR: {exc}"
                 return
             if not stream_result:
-                yield f".\n\n"
+                yield ".\n\n"
                 await asyncio.sleep(1.0)
                 continue
             for offset, data in stream_result:
