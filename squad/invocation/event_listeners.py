@@ -174,6 +174,7 @@ def create_invocation_job(mapper, connection, invocation):
                                 client.V1EnvVar(name="TRANSFORMERS_VERBOSITY", value="error"),
                                 client.V1EnvVar(name="AGENT_ID", value=invocation.agent_id),
                                 client.V1EnvVar(name="SQUAD_API_BASE_URL", value="http://api:8000"),
+                                client.V1EnvVar(name="PYTHONBUFFERED", value="0"),
                                 client.V1EnvVar(
                                     name="EXECUTION_TIMEOUT",
                                     value=f"{invocation.agent.max_execution_time}",

@@ -18,7 +18,6 @@ from squad.aiosession import SessionManager
 from squad.auth import generate_auth_token
 from squad.database import get_session
 from squad.config import settings
-from squad.agent_config import settings as agent_settings
 from squad.invocation.schemas import Invocation
 
 SQUAD_SM = SessionManager(base_url=settings.squad_api_base_url)
@@ -54,6 +53,9 @@ async def _download(invocation_id, path):
     max_tries=7,
 )
 async def _ship_log(invocation_id: str, log: str):
+    """
+    Ship a chunk of logs for this invocation.
+    """
     async with SQUAD_SM.get_session() as session:
         await session.post(f"/invocations/{invocation_id}/log", json={"log": log})
 
@@ -153,6 +155,57 @@ async def prepare_execution_environment(invocation_id: str):
     logger.info(f"Saved configmap and code for {invocation_id=} from {invocation.source=}")
 
 
+async def _capture_logs(stream: asyncio.StreamReader, queue: asyncio.Queue):
+    """
+    Log producer, which just adds the log messages to a queue for later.
+    """
+    while True:
+        line = await stream.readline()
+        if not line:
+            break
+        decoded_line = line.decode().rstrip("\n")
+        print(decoded_line)
+        await queue.put(decoded_line)
+
+
+async def _log_writer(invocation_id: str, queue: asyncio.Queue):
+    """
+    Log writer, consolidates into one alog file and ships off to API.
+    """
+    log_path = f"/tmp/outputs/invocation-{invocation_id}.log"
+    buffer = []
+    char_count = 0
+    with open(log_path, "a+") as outfile:
+        while True:
+            try:
+                line = await asyncio.wait_for(queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                if buffer:
+                    text = "\n".join(buffer)
+                    await _ship_log(invocation_id, text)
+                    buffer.clear()
+                    char_count = 0
+                continue
+            if line is None:
+                if buffer:
+                    outfile.write("\n".join(buffer) + "\n")
+                    outfile.flush()
+                    text = "\n".join(buffer)
+                    await _ship_log(invocation_id, text)
+                break
+            else:
+                outfile.write(line.rstrip("\n") + "\n")
+                outfile.flush()
+                char_count += len(line)
+                if char_count >= 4096:
+                    if buffer:
+                        text = "\n".join(buffer)
+                        await _ship_log(invocation_id, text)
+                        buffer.clear()
+                        char_count = 0
+                buffer.append(line.rstrip("\n"))
+
+
 async def execute(invocation_id):
     """
     Do the thing!
@@ -162,25 +215,8 @@ async def execute(invocation_id):
         config = json.load(infile)
     SQUAD_SM._headers = {"Authorization": config["authorization"]}
 
-    # Log collector.
-    async def _capture_logs(stream, name):
-        nonlocal invocation_id
-        log_method = logger.info if name == "stdout" else logger.warning
-        with open(f"/tmp/outputs/_{name}.log", "a+") as outfile:
-            while True:
-                line = await stream.readline()
-                if line:
-                    decoded_line = line.decode().strip()
-                    log_method(decoded_line)
-                    outfile.write(decoded_line + "\n")
-                    await _ship_log(invocation_id, decoded_line)
-                else:
-                    await _ship_log(invocation_id, "__INVOCATION_FINISHED__")
-                    logger.info(f"Done logging: {name}")
-                    break
-
-    # Execute.
-    failure_reason = None
+    # Launch subprocess
+    log_queue = asyncio.Queue()
     try:
         process = await asyncio.create_subprocess_exec(
             "poetry",
@@ -190,23 +226,34 @@ async def execute(invocation_id):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        await asyncio.wait_for(
-            asyncio.gather(
-                _capture_logs(process.stdout, "stdout"),
-                _capture_logs(process.stderr, "stderr"),
-                process.wait(),
-            ),
-            timeout=agent_settings.timeout,
-        )
+    except Exception as e:
+        logger.error(f"Failed to start subprocess: {e}")
+        await _mark_complete(invocation_id, error=str(e))
+        return
+
+    # Producer tasks for stdout and stderr
+    producer_stdout = asyncio.create_task(_capture_logs(process.stdout, log_queue))
+    producer_stderr = asyncio.create_task(_capture_logs(process.stderr, log_queue))
+
+    # Single consumer for combined logs
+    consumer_task = asyncio.create_task(_log_writer(invocation_id, log_queue))
+
+    failure_reason = None
+    try:
+        returncode = await process.wait()
+        await producer_stdout
+        await producer_stderr
+        await log_queue.put(None)
+        await consumer_task
         delta = time.time() - started_at
-        if process.returncode == 0:
-            message = f"Successfull executed agent task in {round(delta, 5)} seconds, pushing..."
+        if returncode == 0:
+            message = f"Successfully executed agent task in {round(delta, 5)} seconds, pushing..."
             logger.success(message)
             await _ship_log(invocation_id, message)
         else:
             message = f"Agent execution failed after {round(delta, 5)} seconds!"
             logger.error(message)
-            failure_reason = f"Bad exit code from subprocess: {process.returncode}"
+            failure_reason = f"Bad exit code from subprocess: {returncode}"
             await _ship_log(invocation_id, message)
     except asyncio.TimeoutError:
         delta = time.time() - started_at

@@ -7,7 +7,7 @@ import os
 import orjson as json
 import asyncio
 import traceback
-from datetime import timedelta
+from datetime import datetime, timedelta
 from loguru import logger
 from pathlib import Path
 from typing import Optional, Any, Annotated
@@ -299,16 +299,19 @@ async def stream_invocation(
             detail=f"Invocation {invocation_id} not found, or is not public",
         )
     if invocation.completed_at:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invocation {invocation_id} has already completed, unable to stream",
-        )
+        delta = datetime.now().replace(tzinfo=None) - invocation.completed_at.replace(tzinfo=None)
+        if delta >= timedelta(minutes=30):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invocation {invocation_id} has already completed, unable to stream",
+            )
 
     # Stream logs for clients who set the "wait" flag.
     async def _stream():
         nonlocal offset, invocation
         last_offset = offset
-        while True:
+        finished = False
+        while not finished:
             stream_result = None
             try:
                 stream_result = await settings.redis_client.xrange(
@@ -319,9 +322,12 @@ async def stream_invocation(
                 yield f"data: ERROR: {exc}"
                 return
             if not stream_result:
+                yield f".\n\n"
                 await asyncio.sleep(1.0)
                 continue
             for offset, data in stream_result:
+                if finished:
+                    break
                 last_offset = offset.decode()
                 parts = last_offset.split("-")
                 last_offset = parts[0] + "-" + str(int(parts[1]) + 1)
@@ -329,15 +335,14 @@ async def stream_invocation(
                 try:
                     log_data = json.loads(data[b"data"])
                     if log_data["log"] == "__INVOCATION_FINISHED__":
-                        return
+                        finished = True
                 except Exception:
                     ...
                 if not log_data:
                     log_data = {"log": str(data[b"data"])}
                 log_data["offset"] = last_offset
                 if b'"log":"__INVOCATION_FINISHED__"' in data[b"data"]:
-                    await settings.redis_client.delete(invocation.stream_key)
-                    return
+                    finished = True
                 yield f"data: {json.dumps(log_data).decode()}\n\n"
 
     return StreamingResponse(_stream())
@@ -370,10 +375,7 @@ async def append_log(
     await get_current_agent(issuer="squad", scopes=[invocation_id])(request, authorization)
     invocation = await _load_invocation(db, invocation_id, "__agent__")
     if invocation.completed_at:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invocation {invocation_id} has already been marked as completed.",
-        )
+        return "ack"
     log = (await request.json()).get("log")
     if log and isinstance(log, str):
         await settings.redis_client.xadd(
@@ -445,11 +447,7 @@ async def mark_complete(
     await db.refresh(invocation)
     await settings.redis_client.xadd(
         invocation.stream_key,
-        {
-            "data": json.dumps(
-                {"log": "Invocation is now complete.", "timestamp": now_str()}
-            ).decode()
-        },
+        {"data": json.dumps({"log": "__INVOCATION_FINISHED__", "timestamp": now_str()}).decode()},
     )
     return invocation
 
@@ -478,10 +476,14 @@ async def mark_failed(
         {
             "data": json.dumps(
                 {
-                    "log": f"Invocation is complete, with error: {invocation.answer}",
+                    "log": f"Invocation encountered an error: {invocation.answer}",
                     "timestamp": now_str(),
                 }
             ).decode()
         },
+    )
+    await settings.redis_client.xadd(
+        invocation.stream_key,
+        {"data": json.dumps({"log": "__INVOCATION_FINISHED__", "timestamp": now_str()}).decode()},
     )
     return invocation
