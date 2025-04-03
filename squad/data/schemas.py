@@ -260,7 +260,7 @@ class DataUniverseSearchParams(BaseModel):
 
 
 class ApexWebSearchParams(BaseModel):
-    query: str = Field(description="Search query")
+    search_query: str = Field(description="Search query")
     limit: int = Field(default=10, ge=1, le=50, description="Maximum number of results to return.")
     miners: int = Field(default=5, ge=1, le=10, description="Number of unique miners to query.")
     timeout: int = Field(default=10, ge=3, le=30, description="Maximum request timeout in seconds.")

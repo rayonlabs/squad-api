@@ -55,7 +55,7 @@ class ApexWebSearcher(Tool):
         params = {
             key: value
             for key, value in {
-                "query": query,
+                "search_query": query,
                 "miners": miners,
                 "limit": limit,
                 "timeout": timeout,
@@ -69,8 +69,8 @@ class ApexWebSearcher(Tool):
                 "Authorization": settings.authorization,
             },
         )
-        search_results = raw_response.json()["data"]
-        keys_to_keep = ["url", "relevant", "content"]
+        search_results = raw_response.json()["results"]
+        keys_to_keep = ["url", "content"]
         if search_results:
             singular_items = []
             for result in search_results:

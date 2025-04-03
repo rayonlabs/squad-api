@@ -188,7 +188,7 @@ async def create_agent(
         agent_args = args.model_dump()
         if not agent_args.get("name"):
             raise ValueError("Must specify agent name")
-        tool_ids = agent_args.pop("tool_ids", [])
+        tool_ids = list(set(agent_args.pop("tool_ids", [])))
         agent = Agent(**agent_args)
         agent.user_id = user.user_id
     except ValueError as exc:
@@ -265,7 +265,7 @@ async def update_agent(
     agent_args = {}
     try:
         agent_args = args.model_dump()
-        tool_ids = agent_args.pop("tool_ids", [])
+        tool_ids = list(set(agent_args.pop("tool_ids", [])))
         Agent(**agent_args)
     except ValueError as exc:
         return HTTPException(
@@ -377,6 +377,11 @@ async def invoke_agent(
 
     invocation_id = await get_unique_id()
     agent = await _load_agent(db, agent_id_or_name, user.user_id)
+    if not agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found: {agent_id_or_name}",
+        )
 
     # Rate limits.
     count = (
