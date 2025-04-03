@@ -197,7 +197,7 @@ async def _log_writer(invocation_id: str, queue: asyncio.Queue):
                 outfile.write(line.rstrip("\n") + "\n")
                 outfile.flush()
                 char_count += len(line)
-                if char_count >= 4096:
+                if char_count >= 512:
                     if buffer:
                         text = "\n".join(buffer)
                         await _ship_log(invocation_id, text)

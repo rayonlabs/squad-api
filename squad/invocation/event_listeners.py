@@ -210,7 +210,7 @@ def create_invocation_job(mapper, connection, invocation):
 
     # Create job
     try:
-        job_client.create_namespaced_job(namespace="squad", body=job)
+        _ = job_client.create_namespaced_job(namespace="squad", body=job)
         logger.success(f"Successfully created job: {job_id}")
     except Exception as e:
         logger.error(f"Failed to create job: {e}")

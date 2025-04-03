@@ -41,7 +41,7 @@ class ToolUpdateArgs(BaseModel):
         None,
         description="Human readable description of the function",
     )
-    logo_id: Optional[str] = Field(None, "Logo ID")
+    logo_id: Optional[str] = Field(None, description="Logo ID")
     tool_args: Optional[dict] = Field(
         None,
         description="Arguments for the tool",

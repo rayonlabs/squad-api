@@ -90,7 +90,7 @@ class Agent(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     tools = relationship("Tool", secondary=agent_tools, back_populates="agents", lazy="joined")
-    invocations = relationship("Invocation", back_populates="agent")
+    invocations = relationship("Invocation", back_populates="agent", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("unique_x_user", "x_username", unique=True, postgresql_where=(x_username != None)),  # noqa
