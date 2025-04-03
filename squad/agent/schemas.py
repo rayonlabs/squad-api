@@ -166,6 +166,7 @@ class Agent(Base):
                         if line.startswith("class ") and "(Tool)" in line:
                             class_name = line.split("(Tool)")[0].split(" ")[-1]
                 code.append(f"{tool.name} = {class_name}()")
+                tool_names.append(tool.name)
             else:
                 ref = getattr(builtin, tool.template)
                 if (
