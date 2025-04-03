@@ -125,14 +125,17 @@ def tts_tool(
                     outputs.append(outfile.name)
 
             # Combine the audio files into one.
+            final_path = None
             try:
-                return merge_wavs(outputs)
+                final_path = merge_wavs(outputs)
+                return final_path
             except Exception as exc:
                 import traceback
 
                 print(f"ERROR HERE: {exc}\n{traceback.format_exc()}")
             finally:
                 for path in outputs:
-                    os.remove(path)
+                    if path != final_path:
+                        os.remove(path)
 
     return type(clazz_name, (DynamicTTSTool,), {})

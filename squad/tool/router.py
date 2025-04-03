@@ -180,6 +180,8 @@ async def create_tool(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="You need a higher service tier to use custom code",
         )
+    if args.template:
+        args.code = None
 
     # Check the logo.
     await validate_logo(args.logo_id)
@@ -223,6 +225,9 @@ async def update_tool(
         update_data["tool_args"]["tool_name"] = tool.name
         if "description" in update_data and "tool_description" not in update_data["tool_args"]:
             update_data["tool_args"]["tool_description"] = update_data["description"]
+
+    if args.template:
+        args.code = None
 
     # Check the logo.
     await validate_logo(args.logo_id)
