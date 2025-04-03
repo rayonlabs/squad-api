@@ -12,7 +12,7 @@ def merge_wavs(wav_files):
         return wav_files[0]
     with wave.open(wav_files[0], "rb") as first_wav:
         params = first_wav.getparams()
-    with tempfile.NamedTemporaryFile(delete=False) as outfile:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as outfile:
         output_path = outfile.name
     with wave.open(output_path, "wb") as output_wav:
         output_wav.setparams(params)
