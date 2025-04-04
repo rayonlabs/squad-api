@@ -249,7 +249,7 @@ class DataUniverseSearchParams(BaseModel):
         default=[], min_items=0, max_items=5, description="List of keywords to search, 0-5 allowed"
     )
     limit: int = Field(
-        default=100, ge=1, le=1000, description="Number of results to return, between 1-1000"
+        default=32, ge=1, le=32, description="Number of results to return, between 1-32"
     )
     start_date: Optional[datetime] = Field(
         default=None, description="Start date for the search in ISO format"

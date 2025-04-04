@@ -225,9 +225,6 @@ async def update_tool(
         update_data["tool_args"]["tool_name"] = tool.name
         if "description" in update_data and "tool_description" not in update_data["tool_args"]:
             update_data["tool_args"]["tool_description"] = update_data["description"]
-    if args.template:
-        args.code = None
-        tool.code = None
 
     # Check the logo.
     await validate_logo(args.logo_id)
@@ -245,8 +242,6 @@ async def update_tool(
     await validator.validate()
     for key, value in update_data.items():
         setattr(tool, key, value)
-    if args.code and not args.template:
-        tool.code = args.code
     await db.commit()
     await db.refresh(tool)
     return tool
