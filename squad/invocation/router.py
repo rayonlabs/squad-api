@@ -151,25 +151,35 @@ async def get_invocation(
     return invocation
 
 
-@router.get("/{invocation_id}/download/{filename:path}")
-async def get_invocation_output_file(
-    invocation_id: str,
+async def _download_or_render_file(
+    invocation: Invocation,
     filename: str,
-    db: AsyncSession = Depends(get_db_session),
-    user: Any = Depends(get_current_user(raise_not_found=False)),
+    file_list: list[str],
 ):
-    user_id = user.user_id if user else None
-    invocation = await _load_invocation(db, invocation_id, user_id)
-    if not invocation or filename not in invocation.outputs:
+    target_path = None
+    basename_path = None
+    for f in file_list:
+        if f == filename:
+            target_path = f
+            break
+        if os.path.basename(filename) == os.path.basename(f):
+            basename_path = f
+
+    # Fallback to basename matching.
+    if not target_path:
+        target_path = basename_path
+    if not target_path:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Invocation {invocation_id} output file {filename} not found, or is not public",
+            detail=f"Invocation {invocation.invocation_id} file {filename} not found, or is not public",
         )
 
+    # Fetch the file.
     data = io.BytesIO()
     async with settings.s3_client() as s3:
-        await s3.download_fileobj(settings.storage_bucket, filename, data)
+        await s3.download_fileobj(settings.storage_bucket, target_path, data)
 
+    # Render some types inline, others as attachment/download.
     disposition = "attachment"
     file_ext = Path(filename).suffix.lower()
     content_type_map = {
@@ -202,33 +212,13 @@ async def get_invocation_output_file(
     )
 
 
-@router.get("/{invocation_id}/render/{filename:path}")
-async def render_output_file(
+@router.get("/{invocation_id}/download/{filename:path}")
+async def get_invocation_output_file(
     invocation_id: str,
     filename: str,
     db: AsyncSession = Depends(get_db_session),
     user: Any = Depends(get_current_user(raise_not_found=False)),
 ):
-    file_ext = Path(filename).suffix.lower()
-    content_type_map = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".mp4": "video/mp4",
-        ".mp3": "audio/mp3",
-        ".wav": "audio/wav",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".pdf": "application/pdf",
-        ".txt": "text/plain",
-    }
-    content_type = content_type_map.get(file_ext)
-    if not content_type:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="This endpoint can only render certain file types.",
-        )
-
     user_id = user.user_id if user else None
     invocation = await _load_invocation(db, invocation_id, user_id)
     if not invocation:
@@ -236,29 +226,7 @@ async def render_output_file(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Invocation {invocation_id} output file {filename} not found, or is not public",
         )
-    target_output = None
-    for output in invocation.outputs:
-        if os.path.basename(output) == os.path.basename(filename):
-            target_output = output
-    if not target_output:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Invocation {invocation_id} output file {filename} not found, or is not public",
-        )
-    data = io.BytesIO()
-    async with settings.s3_client() as s3:
-        await s3.download_fileobj(settings.storage_bucket, target_output, data)
-    headers = {
-        "Content-Disposition": f'inline; filename="{Path(filename).name}"',
-        "Content-Type": content_type,
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0",
-    }
-    return Response(
-        content=data.getvalue(),
-        headers=headers,
-    )
+    return await _download_or_render_file(invocation, filename, invocation.outputs)
 
 
 @router.get("/{invocation_id}/inputs/{filename:path}")
@@ -266,24 +234,23 @@ async def get_input_file(
     invocation_id: str,
     filename: str,
     request: Request,
+    user: Any = Depends(get_current_user(raise_not_found=False)),
     authorization: str | None = Header(None, alias="Authorization"),
     db: AsyncSession = Depends(get_db_session),
 ):
-    await get_current_agent(issuer="squad", scopes=[invocation_id])(request, authorization)
-    invocation = await _load_invocation(db, invocation_id, "__agent__")
-    if not invocation or filename not in invocation.inputs:
+    user_id = user.user_id if user else None
+    user_scope = user_id
+    if not user:
+        if authorization:
+            await get_current_agent(issuer="squad", scopes=[invocation_id])(request, authorization)
+            user_scope = "__agent__"
+    invocation = await _load_invocation(db, invocation_id, user_scope)
+    if not invocation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Invocation {invocation_id} input file {filename} not found",
         )
-
-    data = io.BytesIO()
-    async with settings.s3_client() as s3:
-        await s3.download_fileobj(settings.storage_bucket, filename, data)
-    return Response(
-        content=data.getvalue(),
-        headers={"Content-Disposition": f'attachment; filename="{Path(filename).name}"'},
-    )
+    return await _download_or_render_file(invocation, filename, invocation.inputs)
 
 
 @router.get("/{invocation_id}/stream")
