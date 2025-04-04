@@ -30,7 +30,7 @@ def image_tool(
     if not tool_description:
         tool_description = (
             f"This is a tool that can generate images with {model} from text prompts. "
-            "The output is a string: the path to the image (webp format) saved to local disk."
+            "The output is a string containing the path to the image saved to local disk."
         )
 
     class DynamicImageTool(Tool):
@@ -67,7 +67,7 @@ def image_tool(
                 },
             )
             result.raise_for_status()
-            with tempfile.NamedTemporaryFile(mode="wb", suffix=".webp", delete=False) as tmpfile:
+            with tempfile.NamedTemporaryFile(mode="wb", suffix=".jpg", delete=False) as tmpfile:
                 tmpfile.write(result.content)
                 return tmpfile.name
 

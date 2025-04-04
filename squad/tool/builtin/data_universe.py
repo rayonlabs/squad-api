@@ -59,7 +59,7 @@ class DataUniverseSearcher(Tool):
         keywords: list[str],
         source: str = "x",
         usernames: list[str] = None,
-        limit: int = 100,
+        limit: int = 32,
         top_n: int = 10,
         start_date: str = None,
         end_date: str = None,
@@ -84,6 +84,7 @@ class DataUniverseSearcher(Tool):
                 "Authorization": settings.authorization,
             },
         )
+        raw_response.raise_for_status()
         search_results = raw_response.json()["data"]
         keys_to_keep = ["uri", "datetime", "source", "label", "content"]
         if search_results:

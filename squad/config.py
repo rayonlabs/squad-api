@@ -201,6 +201,8 @@ class Settings(BaseSettings):
     default_allowed_models: list[str] = [
         "unsloth/gemma-3-27b-it",
         "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+        "unsloth/Llama-3.3-70B-Instruct",
     ]
 
     # Misc.
