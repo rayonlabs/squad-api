@@ -200,6 +200,8 @@ async def _download_or_render_file(
     content_type = content_type_map.get(file_ext)
     if content_type:
         disposition = "inline"
+        if content_type.startswith(("text/", "application/json")):
+            content_type += "; charset=utf-8"
 
     headers = {
         "Content-Disposition": f'{disposition}; filename="{Path(filename).name}"',

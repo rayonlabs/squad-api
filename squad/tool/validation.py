@@ -51,11 +51,12 @@ class LLMArgs(BaseArgs):
     tool_description: Optional[str] = Field(
         None, description="Tool description provided to agent LLM"
     )
-    endpoint: Optional[str] = Field(None, enum=["chat", "completion"])
+    endpoint: Optional[str] = Field("chat", enum=["chat", "completion"])
     system_prompt: Optional[str] = Field(
         None, description="System prompt to use when calling the LLM"
     )
     temperature: float = Field(0.7, ge=0.0, le=3.0)
+    max_tokens: Optional[int] = Field(None, ge=1, le=20000)
 
 
 class TTSArgs(BaseArgs):

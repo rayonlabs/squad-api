@@ -11,6 +11,7 @@ def llm_tool(
     endpoint: str = "chat",
     system_prompt: str = None,
     temperature: float = 0.7,
+    max_tokens: int = None,
     **kwargs,
 ):
     """
@@ -41,7 +42,7 @@ def llm_tool(
         output_type = "string"
 
         def forward(self, prompt: str) -> str:
-            nonlocal model, endpoint, system_prompt, kwargs
+            nonlocal model, endpoint, system_prompt, max_tokens, kwargs
             call_args = {
                 **{
                     "model": model,
@@ -49,7 +50,7 @@ def llm_tool(
                 },
                 **kwargs,
             }
-            if endpoint == "chat":
+            if endpoint != "completions":
                 call_args["messages"] = []
                 if system_prompt:
                     call_args["messages"].append(
@@ -66,14 +67,21 @@ def llm_tool(
                 )
             else:
                 call_args["prompt"] = prompt
+            if max_tokens:
+                call_args["max_tokens"] = max_tokens
+            else:
+                if endpoint == "completion":
+                    call_args["max_tokens"] = 1000  # XXX otherwise vllm uses 16...
             client = openai.OpenAI(
                 base_url="https://llm.chutes.ai/v1",
                 api_key=settings.authorization,
             )
-            method = client.chat.completions if endpoint == "chat" else client.completions
+            method = client.chat.completions if endpoint != "completion" else client.completions
             result = method.create(**call_args)
             return (
-                result.choices[0].message.content if endpoint == "chat" else result.choices[0].text
+                result.choices[0].message.content
+                if endpoint != "completion"
+                else result.choices[0].text
             )
 
     return type(clazz_name, (DynamicLLMTool,), {})

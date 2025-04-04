@@ -48,7 +48,9 @@ RUN apt -y update && apt -y install \
     libtesseract-dev \
     ghostscript \
     libfreetype6-dev \
-    libfontconfig1-dev
+    libfontconfig1-dev \
+    libatk-bridge2.0-0 \
+    libatspi2.0-0
 USER squad
 ADD pyproject-worker.toml /app/pyproject.toml
 ADD poetry-worker.lock /app/poetry.lock
