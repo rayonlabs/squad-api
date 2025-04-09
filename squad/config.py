@@ -203,6 +203,8 @@ class Settings(BaseSettings):
         "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
         "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
         "unsloth/Llama-3.3-70B-Instruct",
+        "chutesai/Llama-4-Scout-17B-16E-Instruct",
+        "chutesai/Llama-4-Maverick-17B-128E-Instruct-FP8",
     ]
 
     # Misc.

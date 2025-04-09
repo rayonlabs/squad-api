@@ -5,6 +5,7 @@ ORM definitions/methods for agents.
 import re
 import json
 import aiohttp
+import secrets
 from copy import deepcopy
 from async_lru import alru_cache
 from sqlalchemy.orm import relationship, validates
@@ -153,6 +154,7 @@ class Agent(Base):
         code = []
         imports = [DEFAULT_IMPORTS.strip()]
         tool_names = []
+        template_names = set()
         for tool in self.tools:
             if tool.code:
                 # This is ugly but it works just fine.
@@ -183,7 +185,13 @@ class Agent(Base):
                     )
                     config_map["agent_callbacks"].append("wipe_tool_creation_step")
                 if isinstance(ref, type) and issubclass(ref, STool):
-                    code.append(f"{tool.name} = {tool.template}()")
+                    suffix = ""
+                    if tool.template in template_names:
+                        suffix = secrets.token_hex(3)
+                        code.append(f"class {tool.template}{suffix}({tool.template}):")
+                        code.append(f'    name = "{ref.name}_{suffix}"')
+                    template_names.add(tool.template)
+                    code.append(f"{tool.name} = {tool.template}{suffix}()")
                     tool_names.append(tool.name)
                 else:
                     config_map["tools"][tool.name] = tool.tool_args
