@@ -217,7 +217,9 @@ class Agent(Base):
         """
         from squad.auth import generate_auth_token
 
-        cache_key = f"ctx:{self.model}"
+        if self.model == "mistralai/Mistral-Small-3.1-24B-Instruct-2503":
+            self.model = "chutesai/Mistral-Small-3.1-24B-Instruct-2503"
+        cache_key = f"ctxsize:{self.model}"
         cached = await settings.redis_client.get(cache_key)
         if cached:
             try:
@@ -234,6 +236,7 @@ class Agent(Base):
                     model = data.get("id")
                     if model == self.model:
                         if size := data.get("max_model_len"):
+                            logger.info("Setting size from /v1/models endpoint")
                             await settings.redis_client.set(cache_key, f"{size}", ex=3600)
                             return size
                         async with session.get(
@@ -249,23 +252,39 @@ class Agent(Base):
                                     "(?:max_model_len|context_size)\s*[=\s]\s*([0-9]+)", code
                                 )
                                 if search:
+                                    logger.info(f"Setting model size from code search: {size}")
                                     size = int(search.group(1))
                                     await settings.redis_client.set(cache_key, f"{size}", ex=3600)
                                     return size
 
             # Fallback to check HF directly.
             async with session.get(
-                f"https://huggingface.co/{model}/resolve/main/config.json"
+                f"https://huggingface.co/{self.model}/resolve/main/config.json"
             ) as hf_resp:
                 resp.raise_for_status()
+                config = None
                 try:
                     config = await hf_resp.json()
                 except Exception:
-                    config = json.loads(await hf_resp.text())
-                size = config.get("max_position_embeddings", config.get("model_max_length"))
-                if size:
-                    await settings.redis_client.set(cache_key, f"{size}", ex=3600)
-                    return size
+                    try:
+                        config = json.loads(await hf_resp.text())
+                    except Exception:
+                        ...
+                if config:
+                    size = config.get("max_position_embeddings", config.get("model_max_length"))
+                    if size:
+                        logger.info(f"Setting model size from huggingface: {size}")
+                        await settings.redis_client.set(cache_key, f"{size}", ex=3600)
+                        return size
+                    text_config = config.get("text_config")
+                    if text_config:
+                        size = text_config.get(
+                            "max_position_embeddings", text_config.get("model_max_length")
+                        )
+                        if size:
+                            logger.info(f"Setting model from text config via huggingface: {size}")
+                            await settings.redis_client.set(cache_key, f"{size}", ex=3600)
+                            return size
         logger.error(f"Error determining context size of {self.model}, using fallback.")
         return 64000
 
