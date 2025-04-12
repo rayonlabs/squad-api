@@ -2,83 +2,16 @@
 Event handlers for invocations.
 """
 
+import asyncio
 import uuid
+import concurrent.futures
 from loguru import logger
 from sqlalchemy import event
 from squad.config import k8s_job_client
 from squad.agent_config import settings as agent_settings
 from squad.invocation.schemas import Invocation
-import os
+from squad.invocation.execute import prepare_execution_package
 from kubernetes import client
-
-
-def create_env_var_from_secret(name: str, secret_name: str, secret_key: str):
-    return client.V1EnvVar(
-        name=name,
-        value_from=client.V1EnvVarSource(
-            secret_key_ref=client.V1SecretKeySelector(name=secret_name, key=secret_key)
-        ),
-    )
-
-
-def create_env_var_from_os(name: str, default=None):
-    value = os.environ.get(name, default)
-    if value is not None:
-        return client.V1EnvVar(name=name, value=str(value))
-    return None
-
-
-def get_environment_variables(invocation_id):
-    env_vars = []
-    direct_vars = [
-        "PYTHONWARNINGS",
-        "OPENSEARCH_URL",
-        "DB_POOL_SIZE",
-        "DB_OVERFLOW",
-        "DEFAULT_MAX_STEPS",
-        "TWEET_INDEX_VERSION",
-        "TWEET_INDEX_SHARDS",
-        "TWEET_INDEX_REPLICAS",
-        "MEMORY_INDEX_VERSION",
-        "MEMORY_INDEX_SHARDS",
-        "MEMORY_INDEX_REPLICAS",
-        "OAUTHLIB_INSECURE_TRANSPORT",
-        "DEFAULT_IMAGE_MODEL",
-        "DEFAULT_VLM_MODEL",
-        "DEFAULT_TEXT_GEN_MODEL",
-        "DEFAULT_TTS_VOICE",
-        "JWT_PRIVATE_PATH",
-        "JWT_PUBLIC_PATH",
-    ]
-    for var_name in direct_vars:
-        env_var = create_env_var_from_os(var_name)
-        if env_var:
-            env_vars.append(env_var)
-    secret_vars = [
-        ("REDIS_PASSWORD", "redis-secret", "password"),
-        ("POSTGRES_PASSWORD", "postgres-secret", "password"),
-        ("POSTGRESQL", "postgres-secret", "url"),
-        ("REDIS_URL", "redis-secret", "url"),
-        ("AWS_ACCESS_KEY_ID", "s3-credentials", "access-key-id"),
-        ("AWS_SECRET_ACCESS_KEY", "s3-credentials", "secret-access-key"),
-        ("AWS_ENDPOINT_URL", "s3-credentials", "endpoint-url"),
-        ("AWS_REGION", "s3-credentials", "aws-region"),
-        ("STORAGE_BUCKET", "s3-credentials", "bucket"),
-        ("X_API_TOKEN", "x-secret", "api-token"),
-        ("X_APP_ID", "x-secret", "app-id"),
-        ("X_CLIENT_ID", "x-secret", "client-id"),
-        ("X_CLIENT_SECRET", "x-secret", "client-secret"),
-        ("AES_SECRET", "aes-secret", "secret"),
-        ("BRAVE_API_TOKEN", "brave-secret", "token"),
-    ]
-    for env_name, secret_name, secret_key in secret_vars:
-        if os.environ.get(env_name):
-            env_vars.append(create_env_var_from_secret(env_name, secret_name, secret_key))
-    env_vars.append(client.V1EnvVar(name="SQUAD_API_BASE_URL", value="http://api:8000"))
-    env_vars.append(client.V1EnvVar(name="COLUMNS", value="200"))
-    env_vars.append(client.V1EnvVar(name="X_LIVE_MODE", value="true"))
-    env_vars.append(client.V1EnvVar(name="INVOCATION_ID", value=invocation_id))
-    return env_vars
 
 
 @event.listens_for(Invocation, "after_insert")
@@ -86,6 +19,15 @@ def create_invocation_job(mapper, connection, invocation):
     """
     Automatically trigger k8s job for the invocation when it's created.
     """
+    logger.info(f"Generating presigned URL for execution package {invocation.invocation_id}=")
+
+    def run_async_in_thread():
+        return asyncio.run(prepare_execution_package(invocation))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(run_async_in_thread)
+        presigned_url = future.result()
+    logger.info(f"Presigned URL generated, creating job {invocation.invocation_id=}")
     job_client = k8s_job_client()
     job_id = str(uuid.uuid5(uuid.NAMESPACE_OID, invocation.invocation_id))
     logger.info(f"Creating kubernetes job for invocation_id={invocation.invocation_id}, {job_id=}")
@@ -124,29 +66,6 @@ def create_invocation_job(mapper, connection, invocation):
                             ),
                         ),
                     ],
-                    init_containers=[
-                        client.V1Container(
-                            name="prepare",
-                            image="parachutes/squad-worker:latest",
-                            image_pull_policy="Always",
-                            command=[
-                                "poetry",
-                                "run",
-                                "python",
-                                "squad/invocation/execute.py",
-                                "--prepare",
-                                "--id",
-                                f"id:{invocation.invocation_id}",
-                            ],
-                            env=get_environment_variables(invocation.invocation_id),
-                            volume_mounts=[
-                                client.V1VolumeMount(
-                                    name="jwt-cert", mount_path="/etc/jwt-cert", read_only=True
-                                ),
-                                client.V1VolumeMount(name="tmpdir", mount_path="/tmp"),
-                            ],
-                        )
-                    ],
                     containers=[
                         client.V1Container(
                             name="execute",
@@ -175,6 +94,7 @@ def create_invocation_job(mapper, connection, invocation):
                                 client.V1EnvVar(name="AGENT_ID", value=invocation.agent_id),
                                 client.V1EnvVar(name="SQUAD_API_BASE_URL", value="http://api:8000"),
                                 client.V1EnvVar(name="PYTHONBUFFERED", value="0"),
+                                client.V1EnvVar(name="PACKAGE_URL", value=presigned_url),
                                 client.V1EnvVar(
                                     name="EXECUTION_TIMEOUT",
                                     value=f"{invocation.agent.max_execution_time}",

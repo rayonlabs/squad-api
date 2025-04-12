@@ -2,6 +2,7 @@
 Agent invocation execution entrypoints.
 """
 
+import io
 import argparse
 import os
 import time
@@ -10,13 +11,13 @@ import glob
 import asyncio
 import backoff
 import aiohttp
+import tarfile
+import tempfile
 import squad.database.orms  # noqa
 from loguru import logger
 from pathlib import Path
-from sqlalchemy import select
 from squad.aiosession import SessionManager
 from squad.auth import generate_auth_token
-from squad.database import get_session
 from squad.config import settings
 from squad.invocation.schemas import Invocation
 
@@ -101,58 +102,85 @@ async def _upload_file(invocation_id: str, path: str):
             logger.success(f"Uploaded one file: {path}")
 
 
-async def prepare_execution_environment(invocation_id: str):
+async def prepare_execution_package(invocation: Invocation):
     """
     Copy all of the invocation input files to disk from the blob store, and
     generate the code that will be used by the agent for this task.
     """
-    os.makedirs("/tmp/inputs", exist_ok=True)
-    os.makedirs("/tmp/conf", exist_ok=True)
-    os.makedirs("/tmp/outputs", exist_ok=True)
-    async with get_session() as session:
-        invocation = (
-            (
-                await session.execute(
-                    select(Invocation).where(Invocation.invocation_id == invocation_id)
-                )
+    invocation_id = invocation.invocation_id
+    if invocation.completed_at:
+        raise Exception(f"Invocation already completed: {invocation_id}")
+    tar_path = None
+    try:
+        with tempfile.TemporaryDirectory() as tempdir:
+            os.makedirs(os.path.join(tempdir, "inputs"))
+            os.makedirs(os.path.join(tempdir, "conf"))
+
+            # Create an auth token to use.
+            scopes = [invocation_id]
+            if invocation.source in ["x", "schedule"]:
+                scopes.append("x")
+            token = generate_auth_token(
+                invocation.user_id,
+                duration_minutes=60,
+                agent_id=invocation.agent_id,
+                scopes=scopes,
             )
-            .unique()
-            .scalar_one_or_none()
-        )
-        if not invocation:
-            raise Exception(f"Invocation does not exist: {invocation_id}")
-        if invocation.completed_at:
-            raise Exception(f"Invocation already completed: {invocation_id}")
+            local_paths = []
+            if invocation.inputs:
+                for path in invocation.inputs:
+                    filename = Path(path).name
+                    local_paths.append(os.path.join("/tmp/inputs", filename))
 
-    # Create an auth token to use.
-    scopes = [invocation_id]
-    if invocation.source in ["x", "schedule"]:
-        scopes.append("x")
-    token = generate_auth_token(
-        invocation.user_id,
-        duration_minutes=60,
-        agent_id=invocation.agent_id,
-        scopes=scopes,
-    )
-    SQUAD_SM._headers = {"Authorization": f"Bearer {token}"}
+            # Configure the task, based on the input type.
+            configmap, code = invocation.agent.as_executable(
+                task=invocation.task, source=invocation.source, input_files=local_paths
+            )
+            configmap["authorization"] = f"Bearer {token}"
+            configmap["inputs"] = invocation.inputs
+            with open(os.path.join(tempdir, "conf", "configmap.json"), "w") as outfile:
+                outfile.write(json.dumps(configmap, indent=2))
+            with open(os.path.join(tempdir, "conf", "execute.py"), "w") as outfile:
+                outfile.write(code)
 
-    # Download input files.
-    local_paths = None
-    if invocation.inputs:
-        local_paths = await asyncio.gather(
-            *[_download(invocation_id, path) for path in invocation.inputs]
-        )
+            logger.info(f"Saved configmap and code for {invocation_id=} from {invocation.source=}")
 
-    # Configure the task, based on the input type.
-    configmap, code = invocation.agent.as_executable(
-        task=invocation.task, source=invocation.source, input_files=local_paths
-    )
-    configmap["authorization"] = f"Bearer {token}"
-    with open("/tmp/conf/configmap.json", "w") as outfile:
-        outfile.write(json.dumps(configmap, indent=2))
-    with open("/tmp/conf/execute.py", "w") as outfile:
-        outfile.write(code)
-    logger.info(f"Saved configmap and code for {invocation_id=} from {invocation.source=}")
+            # Create a tarball of the tempdir.
+            tar_filename = f"{invocation_id}_package.tar.gz"
+            tar_path = os.path.join(tempdir, tar_filename)
+            with tarfile.open(tar_path, "w:gz") as tar:
+                for dir_name in ["inputs", "conf"]:
+                    dir_path = os.path.join(tempdir, dir_name)
+                    tar.add(dir_path, arcname=dir_name)
+
+            # Upload the tarball and generate a presigned URL.
+            upload_path = f"executions/{invocation_id}/{tar_filename}"
+            async with settings.s3_client() as s3:
+                with open(tar_path, "rb") as f:
+                    await s3.upload_fileobj(
+                        io.BytesIO(f.read()),
+                        settings.storage_bucket,
+                        upload_path,
+                    )
+            async with settings.s3_client() as s3:
+                presigned = await s3.generate_presigned_url(
+                    "get_object",
+                    Params={
+                        "Bucket": settings.storage_bucket,
+                        "Key": upload_path,
+                    },
+                    ExpiresIn=86400,
+                )
+                return presigned
+    except Exception as exc:
+        logger.error(f"Error packaging execution for {invocation.invocation_id}: {exc}")
+        raise
+    finally:
+        if tar_path and os.path.exists(tar_path):
+            try:
+                os.remove(tar_path)
+            except Exception as exc:
+                logger.warning(f"Failed to remove temporary tarball {tar_path}: {exc}")
 
 
 async def _capture_logs(stream: asyncio.StreamReader, queue: asyncio.Queue):
@@ -211,9 +239,45 @@ async def execute(invocation_id):
     Do the thing!
     """
     started_at = time.time()
+
+    # Make sure our execution package URL is set (presigned URL to tarball with code).
+    package_url = os.getenv("PACKAGE_URL")
+    if not package_url:
+        logger.warning("No PACKAGE_URL, nothing to do...")
+        return
+
+    # Download the execution package.
+    tar_path = f"/tmp/{invocation_id}_package.tar.gz"
+    try:
+        logger.info(f"Downloading package from URL for invocation {invocation_id}")
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            async with session.get(package_url) as response:
+                with open(tar_path, "wb") as f:
+                    f.write(await response.read())
+        logger.info(f"Extracting package to /tmp for invocation {invocation_id}")
+        with tarfile.open(tar_path, "r:gz") as tar:
+            tar.extractall(path="/tmp")
+        logger.info(f"Successfully extracted package for invocation {invocation_id}")
+        os.remove(tar_path)
+        if not os.path.exists("/tmp/inputs"):
+            logger.warning("/tmp/inputs directory not found after extraction")
+        if not os.path.exists("/tmp/conf"):
+            logger.warning("/tmp/conf directory not found after extraction")
+    except Exception as exc:
+        logger.error(f"Error downloading/extracting execution package {invocation_id=}: {exc}")
+        if os.path.exists(tar_path):
+            os.remove(tar_path)
+        raise
+    os.makedirs("/tmp/outputs", exist_ok=True)
+
+    # Download input files.
     with open("/tmp/conf/configmap.json") as infile:
         config = json.load(infile)
     SQUAD_SM._headers = {"Authorization": config["authorization"]}
+
+    # Download input files.
+    if config.get("inputs"):
+        await asyncio.gather(*[_download(invocation_id, path) for path in config["inputs"]])
 
     # Launch subprocess
     log_queue = asyncio.Queue()
@@ -300,21 +364,13 @@ async def execute(invocation_id):
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--prepare",
-        action="store_true",
-        help="Prepare the execution environment, not run it.",
-    )
-    parser.add_argument(
         "--id",
         type=str,
         required=True,
         help="The invocation ID to initialize/execute",
     )
     args = parser.parse_args()
-    if args.prepare:
-        await prepare_execution_environment(args.id[3:])
-    else:
-        await execute(args.id[3:])
+    await execute(args.id[3:])
 
 
 if __name__ == "__main__":
