@@ -177,6 +177,8 @@ async def oauth_callback(
     redirect_path = await settings.redis_client.get(f"xredirect:{state}")
     if not redirect_path:
         redirect_path = "/?x_auth_success=true"
+    if isinstance(redirect_path, bytes):
+        redirect_path = redirect_path.decode()
     if isinstance(code_verifier, bytes):
         code_verifier = code_verifier.decode()
     try:
@@ -236,7 +238,8 @@ async def oauth_callback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error setting X auth credentials for agent: {exc}",
         )
-    return RedirectResponse(url=f"{settings.squad_base_url}{redirect_path}")
+
+    return RedirectResponse(url=f"{settings.squad_base_url}/{redirect_path.lstrip('/')}")
 
 
 async def get_agent_x_client(db: AsyncSession, agent: Agent):

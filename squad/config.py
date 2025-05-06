@@ -173,7 +173,7 @@ class Settings(BaseSettings):
     x_consumer_token_secret: Optional[str] = os.getenv("X_CONSUMER_TOKEN_SECRET")
 
     # Squad URLs.
-    squad_base_url: str = os.getenv("SQUAD_BASE_URL", "https://sqd.io")
+    squad_base_url: str = os.getenv("SQUAD_BASE_URL", "https://squad.ai")
     squad_api_base_url: str = os.getenv("SQUAD_API_BASE_URL", "http://api:8000")
 
     # Tweet storage.

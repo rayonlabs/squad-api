@@ -110,7 +110,12 @@ class Agent(Base):
         return self.x_token_expires_at is not None
 
     def as_executable(
-        self, task: str, max_steps: int = None, source: str = "api", input_files: list[str] = None
+        self,
+        task: str,
+        user_id: str,
+        max_steps: int = None,
+        source: str = "api",
+        input_files: list[str] = None,
     ):
         """
         Get the agent as an executable python script for a given task.
@@ -176,8 +181,9 @@ class Agent(Base):
                     source not in ("x", "schedule")
                     and tool.template.startswith("X")
                     and tool.template != "XSearcher"
+                    and user_id != self.user_id
                 ):
-                    # No X actions for regular API invocations.
+                    # No X actions for regular API invocations if not agent owner.
                     continue
                 imports.append(f"from squad.tool.builtin import {tool.template}")
                 if tool.template == "DangerousDynamo":

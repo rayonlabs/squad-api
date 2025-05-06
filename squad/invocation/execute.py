@@ -134,7 +134,10 @@ async def prepare_execution_package(invocation: Invocation):
 
             # Configure the task, based on the input type.
             configmap, code = invocation.agent.as_executable(
-                task=invocation.task, source=invocation.source, input_files=local_paths
+                task=invocation.task,
+                user_id=invocation.user_id,
+                source=invocation.source,
+                input_files=local_paths,
             )
             configmap["authorization"] = f"Bearer {token}"
             configmap["inputs"] = invocation.inputs

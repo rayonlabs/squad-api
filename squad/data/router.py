@@ -16,6 +16,7 @@ from squad.agent.schemas import get_by_id
 from squad.secret.schemas import BYOKSecret, BYOKSecretItem
 from squad.config import settings
 from squad.util import decrypt
+from squad.auth import generate_auth_token
 from squad.database import get_session
 from squad.data.schemas import (
     DataUniverseSearchParams,
@@ -89,7 +90,9 @@ async def perform_x_search(
     if not current_user:
         await get_current_agent(issuer="squad", scopes=["x"])(request, authorization)
     params = search.dict()
-    params["api_key"] = authorization
+    params["api_key"] = "Bearer " + generate_auth_token(
+        settings.default_user_id, duration_minutes=5
+    )
     tweets, _ = await x_search(**params)
     return tweets
 
@@ -228,7 +231,9 @@ async def perform_memory_search(
     agent = await _get_agent(request, agent_id, authorization, current_user)
     params = search.dict()
     params["agent_id"] = agent.agent_id
-    params["api_key"] = authorization
+    params["api_key"] = "Bearer " + generate_auth_token(
+        settings.default_user_id, duration_minutes=5
+    )
     memories, _ = await memory_search(**params)
     return memories
 

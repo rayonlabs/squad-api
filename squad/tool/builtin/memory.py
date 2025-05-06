@@ -180,7 +180,8 @@ def memory_creator(
                     },
                 )
                 response.raise_for_status()
-                return f"Memory has been created: memory_id = {response.json()['memory_id']}"
+                m_id = response.json()["uid"]
+                return f"Memory created with uid: {m_id}"
             except Exception as exc:
                 print(f"Failed to create memory: {exc}")
             return "Failed to create the memory!"
